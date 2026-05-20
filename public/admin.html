@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Crawler</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#f5f5f5;padding:32px 24px}
+    h1{font-size:1.4rem;margin-bottom:24px}
+    h2{font-size:1rem;margin:28px 0 10px;color:#444}
+    table{width:100%;background:#fff;border-radius:10px;border-collapse:collapse;box-shadow:0 1px 6px rgba(0,0,0,.08);overflow:hidden}
+    th{background:#f9f9f9;padding:10px 14px;text-align:left;font-size:.75rem;color:#888;font-weight:600;text-transform:uppercase;border-bottom:1px solid #eee}
+    td{padding:10px 14px;font-size:.88rem;border-bottom:1px solid #f0f0f0;vertical-align:top}
+    tr:last-child td{border-bottom:none}
+    .on{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:700;background:#e6f9f0;color:#1a9c5b}
+    .off{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:700;background:#ffeaea;color:#d93636}
+    a{color:#ff4500;text-decoration:none;font-size:.8rem}
+    a:hover{text-decoration:underline}
+    .sub{font-size:.75rem;color:#888}
+    button.tog{font-size:.78rem;border:1px solid #ccc;background:#fff;border-radius:6px;padding:3px 8px;cursor:pointer;margin-left:6px}
+  </style>
+</head>
+<body>
+  <h1>Crawler Admin</h1>
+  <h2>Dealers</h2>
+  <table><thead><tr><th>Name</th><th>Industry</th><th>Emails</th><th>Status</th><th>Since</th></tr></thead>
+  <tbody id="db"></tbody></table>
+  <h2>Recent Leads</h2>
+  <table><thead><tr><th>Time</th><th>Dealer</th><th>Subreddit</th><th>Post</th><th>Reason</th></tr></thead>
+  <tbody id="lb"></tbody></table>
+  <script>
+    async function load() {
+      const [dealers, leads] = await Promise.all([
+        fetch('/api/dealers').then(r=>r.json()),
+        fetch('/api/leads').then(r=>r.json()),
+      ]);
+      document.getElementById('db').innerHTML = dealers.length
+        ? dealers.map(d=>`<tr>
+            <td><strong>${d.name}</strong></td>
+            <td>${d.industry}</td>
+            <td class="sub">${d.emails}</td>
+            <td>
+              <span class="${d.active?'on':'off'}">${d.active?'Active':'Paused'}</span>
+              <button class="tog" onclick="toggle(${d.id},${d.active?0:1})">${d.active?'Pause':'Activate'}</button>
+            </td>
+            <td class="sub">${(d.created_at||'').slice(0,10)}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="5">No dealers yet. <a href="/register.html">Register one →</a></td></tr>';
+      document.getElementById('lb').innerHTML = leads.length
+        ? leads.map(l=>`<tr>
+            <td class="sub" style="white-space:nowrap">${(l.emailed_at||'').slice(0,16).replace('T',' ')}</td>
+            <td><strong>${l.dealer_name}</strong><br><span class="sub">${l.industry}</span></td>
+            <td class="sub">r/${l.subreddit}</td>
+            <td>${(l.post_title||l.post_text||'').slice(0,80)}…<br><a href="${l.post_url}" target="_blank">View →</a></td>
+            <td class="sub">${l.match_reason||'-'}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="5">No leads yet.</td></tr>';
+    }
+    async function toggle(id, active) {
+      await fetch(`/api/dealers/${id}/toggle`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})});
+      load();
+    }
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>

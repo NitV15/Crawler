@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register as Dealer — Crawler</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#f5f5f5;display:flex;justify-content:center;padding:40px 20px}
+    .card{background:#fff;border-radius:12px;padding:32px;width:100%;max-width:480px;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+    h1{font-size:1.5rem;margin-bottom:8px}
+    p{color:#666;margin-bottom:24px;font-size:.9rem}
+    label{display:block;font-size:.85rem;font-weight:600;color:#333;margin-bottom:4px}
+    input,textarea{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:.95rem;margin-bottom:16px}
+    textarea{height:100px;resize:vertical}
+    button{width:100%;padding:12px;background:#ff4500;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer}
+    button:hover{background:#e03d00}
+    .msg{display:none;text-align:center;margin-top:16px;font-size:.9rem}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Register as Dealer</h1>
+    <p>Get notified when we find potential buyers for your products on Reddit.</p>
+    <form id="form">
+      <label>Business Name</label>
+      <input type="text" name="name" placeholder="e.g. FitZone Equipment" required>
+      <label>Email Address(es)</label>
+      <input type="text" name="emails" placeholder="owner@fitzone.com, sales@fitzone.com" required>
+      <label>Industry</label>
+      <input type="text" name="industry" placeholder="e.g. Gym Equipment, Travel Agency" required>
+      <label>Describe your products / services</label>
+      <textarea name="description" placeholder="e.g. We sell gym equipment — treadmills, dumbbells, resistance bands, gym mats, and complete home gym setups." required></textarea>
+      <button type="submit">Register</button>
+    </form>
+    <div class="msg" id="ok" style="color:green">✅ Registered! We'll email you when we find leads.</div>
+    <div class="msg" id="err" style="color:red">❌ Registration failed. Please try again.</div>
+  </div>
+  <script>
+    document.getElementById('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+      });
+      document.getElementById(res.ok ? 'ok' : 'err').style.display = 'block';
+      if (res.ok) e.target.reset();
+    });
+  </script>
+</body>
+</html>

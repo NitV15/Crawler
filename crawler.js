@@ -42,13 +42,13 @@ async function runCrawl() {
     for (const post of posts) {
       const postId = post.id;
       if (seenThisRun.has(postId) || isSeenPost(db, postId)) continue;
-      seenThisRun.add(postId);
-      markPostSeen(db, postId);
-      processed++;
-
       const postTitle = post.title || '';
       const postText = post.selftext || '';
       if (!postTitle && !postText) continue;
+
+      seenThisRun.add(postId);
+      markPostSeen(db, postId);
+      processed++;
 
       try {
         const match = await matchPost({ postTitle, postText, subreddit }, dealers);

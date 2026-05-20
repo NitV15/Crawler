@@ -38,7 +38,7 @@ If no match: {"matched": false}`;
     contents: prompt,
   });
 
-  const text = result.text.trim().replace(/```json|```/g, '').trim();
+  const text = result.text.trim().replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
   return JSON.parse(text);
 }
 

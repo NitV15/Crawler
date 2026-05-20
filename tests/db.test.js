@@ -1,4 +1,4 @@
-const { openDb, getActiveDealers, isSeenPost, markPostSeen, saveLead, addDealer, getLeads, getDealers } = require('../db');
+const { openDb, getActiveDealers, isSeenPost, markPostSeen, saveLead, addDealer, getLeads, getDealers, toggleDealer } = require('../db');
 
 describe('db', () => {
   let db;
@@ -59,5 +59,16 @@ describe('db', () => {
   test('getDealers returns all dealers including inactive', () => {
     const all = getDealers(db);
     expect(all).toHaveLength(1);
+  });
+
+  test('toggleDealer deactivates and reactivates a dealer', () => {
+    const { toggleDealer } = require('../db');
+    const dealer = getActiveDealers(db)[0];
+
+    toggleDealer(db, dealer.id, false);
+    expect(getActiveDealers(db)).toHaveLength(0);
+
+    toggleDealer(db, dealer.id, true);
+    expect(getActiveDealers(db)).toHaveLength(1);
   });
 });

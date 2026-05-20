@@ -2,6 +2,9 @@
   "name": "crawler",
   "version": "1.0.0",
   "description": "Reddit lead discovery and dealer notification system",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "scheduler.js",
   "scripts": {
     "start": "node scheduler.js",

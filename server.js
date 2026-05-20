@@ -14,8 +14,12 @@ function createApp(db) {
     if (!name || !emails || !industry || !description) {
       return res.status(400).json({ error: 'All fields required: name, emails, industry, description' });
     }
-    addDealer(db, { name, emails, industry, description });
-    res.json({ success: true });
+    try {
+      addDealer(db, { name, emails, industry, description });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to register dealer' });
+    }
   });
 
   app.get('/api/dealers', (req, res) => res.json(getDealers(db)));
@@ -23,8 +27,15 @@ function createApp(db) {
   app.get('/api/leads', (req, res) => res.json(getLeads(db)));
 
   app.post('/api/dealers/:id/toggle', (req, res) => {
-    toggleDealer(db, parseInt(req.params.id), req.body.active);
-    res.json({ success: true });
+    if (req.body.active === undefined) {
+      return res.status(400).json({ error: 'active field required' });
+    }
+    try {
+      toggleDealer(db, parseInt(req.params.id), req.body.active);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update dealer' });
+    }
   });
 
   return app;

@@ -30,6 +30,9 @@
   <table><thead><tr><th>Time</th><th>Dealer</th><th>Subreddit</th><th>Post</th><th>Reason</th></tr></thead>
   <tbody id="lb"></tbody></table>
   <script>
+    function esc(s) {
+      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
     async function load() {
       const [dealers, leads] = await Promise.all([
         fetch('/api/dealers').then(r=>r.json()),
@@ -37,28 +40,29 @@
       ]);
       document.getElementById('db').innerHTML = dealers.length
         ? dealers.map(d=>`<tr>
-            <td><strong>${d.name}</strong></td>
-            <td>${d.industry}</td>
-            <td class="sub">${d.emails}</td>
+            <td><strong>${esc(d.name)}</strong></td>
+            <td>${esc(d.industry)}</td>
+            <td class="sub">${esc(d.emails)}</td>
             <td>
               <span class="${d.active?'on':'off'}">${d.active?'Active':'Paused'}</span>
               <button class="tog" onclick="toggle(${d.id},${d.active?0:1})">${d.active?'Pause':'Activate'}</button>
             </td>
-            <td class="sub">${(d.created_at||'').slice(0,10)}</td>
+            <td class="sub">${esc((d.created_at||'').slice(0,10))}</td>
           </tr>`).join('')
         : '<tr><td colspan="5">No dealers yet. <a href="/register.html">Register one →</a></td></tr>';
       document.getElementById('lb').innerHTML = leads.length
         ? leads.map(l=>`<tr>
-            <td class="sub" style="white-space:nowrap">${(l.emailed_at||'').slice(0,16).replace('T',' ')}</td>
-            <td><strong>${l.dealer_name}</strong><br><span class="sub">${l.industry}</span></td>
-            <td class="sub">r/${l.subreddit}</td>
-            <td>${(l.post_title||l.post_text||'').slice(0,80)}…<br><a href="${l.post_url}" target="_blank">View →</a></td>
-            <td class="sub">${l.match_reason||'-'}</td>
+            <td class="sub" style="white-space:nowrap">${esc((l.emailed_at||'').slice(0,16).replace('T',' '))}</td>
+            <td><strong>${esc(l.dealer_name)}</strong><br><span class="sub">${esc(l.industry)}</span></td>
+            <td class="sub">r/${esc(l.subreddit)}</td>
+            <td>${esc((l.post_title||l.post_text||'').slice(0,80))}…<br><a href="${esc(l.post_url)}" target="_blank">View →</a></td>
+            <td class="sub">${esc(l.match_reason||'-')}</td>
           </tr>`).join('')
         : '<tr><td colspan="5">No leads yet.</td></tr>';
     }
     async function toggle(id, active) {
-      await fetch(`/api/dealers/${id}/toggle`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})});
+      const res = await fetch(`/api/dealers/${id}/toggle`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})});
+      if (!res.ok) { alert('Failed to update dealer status. Please try again.'); return; }
       load();
     }
     load();

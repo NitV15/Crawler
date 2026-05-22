@@ -1,37 +1,42 @@
 require('dotenv').config();
 const { GoogleGenAI } = require('@google/genai');
 
+const CATEGORIES = [
+  'Automotive', 'Real Estate', 'Travel & Tourism', 'Education & Coaching',
+  'Healthcare & Wellness', 'Finance & Insurance', 'IT Services & Software',
+  'Furniture & Home Decor', 'Fitness & Gym', 'Food & Catering',
+  'Construction & Interior Design', 'Legal Services', 'Electronics & Gadgets',
+  'Clothing & Fashion', 'Beauty & Salon', 'Marketing & Advertising',
+  'Photography & Events', 'Logistics & Packers Movers', 'HR & Staffing',
+  'Retail & E-commerce', 'Other',
+];
+
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-async function matchPost({ postTitle, postText, subreddit }, dealers) {
-  if (!dealers.length) return null;
-
+async function identifyLead({ postTitle, postText, subreddit }) {
   const ai = getAI();
 
-  const dealerList = dealers
-    .map((d, i) => `${i + 1}. ID=${d.id} | ${d.name} (${d.industry}): ${d.description}`)
-    .join('\n');
+  const prompt = `You are a lead identification assistant.
 
-  const prompt = `You are a lead-matching assistant for a B2B platform.
-
-Here are the onboarded dealers and what they sell:
-${dealerList}
-
-Here is a Reddit post:
+REDDIT POST:
 Title: ${postTitle || '(no title)'}
 Text: ${(postText || '').slice(0, 500)}
 Subreddit: r/${subreddit}
 
-Does this post suggest the person could be a potential buyer for any of the dealers above?
-Match based on INTENT, not just keywords. "I love travelling" should match a travel agency.
-Only match if there is genuine purchase intent or strong interest.
-If multiple dealers match, pick the single best one.
+TASK:
+1. Is this person looking to BUY or HIRE a product or service? Match based on INTENT not keywords.
+2. Is this post someone looking to HIRE AN EMPLOYEE or recruit staff?
+3. If it is a lead — which category? Pick exactly one: ${CATEGORIES.join(', ')}
+4. What can we sell them? (one short phrase)
+5. Write a friendly 1-2 sentence suggested reply.
+6. What location is mentioned? Use subreddit as hint (r/Faridabad → "Faridabad"). Return null if none.
 
-Respond with ONLY valid JSON, no markdown:
-If match: {"matched": true, "dealer_id": <number>, "reason": "<one sentence>", "suggested_reply": "<friendly 1-2 sentence reply mentioning the dealer products>"}
-If no match: {"matched": false}`;
+Respond ONLY valid JSON, no markdown:
+If lead: {"is_lead":true,"is_hiring_post":false,"lead_category":"<cat>","what_to_sell":"<phrase>","suggested_reply":"<reply>","post_location":"<city or null>"}
+If hiring post: {"is_lead":false,"is_hiring_post":true}
+If not a lead: {"is_lead":false,"is_hiring_post":false}`;
 
   const result = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
@@ -42,4 +47,14 @@ If no match: {"matched": false}`;
   return JSON.parse(text);
 }
 
-module.exports = { matchPost };
+// Deprecated: matchPost will be replaced by dealer-matcher.js in Phase 2
+// Exported for backward compatibility during crawler redesign
+async function matchPost({ postTitle, postText, subreddit }, dealers) {
+  // Phase 1: Identify if it's a lead
+  const lead = await identifyLead({ postTitle, postText, subreddit });
+
+  // Phase 1 only - no dealer matching yet (will be Phase 2)
+  return { matched: false };
+}
+
+module.exports = { identifyLead, matchPost };

@@ -4,7 +4,7 @@ const path = require('path');
 const {
   openDb, addDealer, getDealers, getLeads, toggleDealer,
   getUnmatchedLeads, assignLead, getDealer,
-  addPayment, getPayments, verifyPayment, rejectPayment,
+  addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription,
 } = require('./db');
 const { runCrawl } = require('./crawler');
@@ -29,11 +29,17 @@ function createApp(db) {
     }
   });
 
-  app.get('/api/dealers', (req, res) => res.json(getDealers(db)));
+  app.get('/api/dealers', (req, res) => {
+    try { res.json(getDealers(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch dealers' }); }
+  });
 
-  app.get('/api/leads', (req, res) => res.json(getLeads(db)));
+  app.get('/api/leads', (req, res) => {
+    try { res.json(getLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
+  });
 
-  app.get('/api/leads/unmatched', (req, res) => res.json(getUnmatchedLeads(db)));
+  app.get('/api/leads/unmatched', (req, res) => {
+    try { res.json(getUnmatchedLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch unmatched leads' }); }
+  });
 
   app.post('/api/dealers/:id/toggle', (req, res) => {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
@@ -75,12 +81,14 @@ function createApp(db) {
     }
   });
 
-  app.get('/api/payments', (req, res) => res.json(getPayments(db)));
+  app.get('/api/payments', (req, res) => {
+    try { res.json(getPayments(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
+  });
 
   app.post('/api/payments/:id/verify', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
+      const payment = getPayment(db, payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
       verifyPayment(db, payId);
       activateDealerSubscription(db, payment.dealer_id);
@@ -95,7 +103,7 @@ function createApp(db) {
   app.post('/api/payments/:id/reject', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
+      const payment = getPayment(db, payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
       rejectPayment(db, payId);
       const dealer = getDealer(db, payment.dealer_id);

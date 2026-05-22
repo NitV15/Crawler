@@ -190,6 +190,10 @@ function addPayment(db, { dealerId, utrNumber }) {
   return db.prepare(`INSERT INTO payments (dealer_id, utr_number) VALUES (?, ?)`).run(dealerId, utrNumber);
 }
 
+function getPayment(db, id) {
+  return db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+}
+
 function getPayments(db) {
   return db.prepare(`
     SELECT p.*, d.name as dealer_name, d.emails as dealer_emails
@@ -211,5 +215,5 @@ module.exports = {
   openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   isSeenPost, markPostSeen, saveLead, getLeads, getUnmatchedLeads, assignLead,
-  addPayment, getPayments, verifyPayment, rejectPayment,
+  addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
 };

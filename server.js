@@ -116,6 +116,18 @@ function createApp(db) {
     }
   });
 
+  app.post('/api/admin/cleanup', (req, res) => {
+    try {
+      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-30 days')`).run();
+      const r2 = db.prepare(`DELETE FROM fetched_posts WHERE fetched_at < datetime('now', '-60 days')`).run();
+      const r3 = db.prepare(`DELETE FROM leads WHERE status = 'unmatched' AND emailed_at < datetime('now', '-90 days')`).run();
+      db.prepare('VACUUM').run();
+      res.json({ deleted_seen: r1.changes, deleted_fetched: r2.changes, deleted_unmatched: r3.changes });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get('/api/fetched-posts', (req, res) => {
     try { res.json(getFetchedPosts(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
   });

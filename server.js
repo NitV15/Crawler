@@ -10,12 +10,24 @@ function createApp(db) {
   app.use(express.static(path.join(__dirname, 'public')));
 
   app.post('/api/register', (req, res) => {
-    const { name, emails, industry, description } = req.body;
-    if (!name || !emails || !industry || !description) {
-      return res.status(400).json({ error: 'All fields required: name, emails, industry, description' });
+    const { name, emails, industry, description,
+            industry_category, services, target_customers, keywords,
+            state, city, service_areas, custom_subreddits } = req.body;
+    if (!name || !emails || !(industry || industry_category)) {
+      return res.status(400).json({ error: 'All fields required: name, emails, industry' });
     }
     try {
-      addDealer(db, { name, emails, industry, description });
+      addDealer(db, {
+        name, emails,
+        industry_category: industry_category || industry || '',
+        services: services || description || '',
+        target_customers: target_customers || '',
+        keywords: keywords || '',
+        state: state || '',
+        city: city || '',
+        service_areas: service_areas || '',
+        custom_subreddits: custom_subreddits || '',
+      });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to register dealer' });

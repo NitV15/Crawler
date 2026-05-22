@@ -27,11 +27,15 @@ describe('server API', () => {
     expect(res.body.error).toBeDefined();
   });
 
-  test('GET /api/dealers returns seeded dealer', async () => {
+  test('GET /api/dealers returns registered dealer', async () => {
+    await request(app).post('/api/register').send({
+      name: 'Test Dealer', emails: 'test@test.com',
+      industry: 'Testing', description: 'A test dealer',
+    });
     const res = await request(app).get('/api/dealers');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].name).toBe('Nitin Tanwar (Test)');
+    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    expect(res.body[0].name).toBe('Test Dealer');
   });
 
   test('GET /api/leads returns empty array initially', async () => {
@@ -41,6 +45,10 @@ describe('server API', () => {
   });
 
   test('POST /api/dealers/:id/toggle pauses a dealer', async () => {
+    await request(app).post('/api/register').send({
+      name: 'Toggle Dealer', emails: 'toggle@test.com',
+      industry: 'Testing', description: 'A toggle test dealer',
+    });
     const dealersRes = await request(app).get('/api/dealers');
     const id = dealersRes.body[0].id;
 

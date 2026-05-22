@@ -79,14 +79,13 @@ function createApp(db) {
 
   app.post('/api/payments/:id/verify', async (req, res) => {
     const payId = parseInt(req.params.id);
-    const { dealer_id } = req.body;
     try {
+      const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
+      if (!payment) return res.status(404).json({ error: 'Payment not found' });
       verifyPayment(db, payId);
-      if (dealer_id) {
-        activateDealerSubscription(db, parseInt(dealer_id));
-        const dealer = getDealer(db, parseInt(dealer_id));
-        if (dealer) await sendSubscriptionConfirmationEmail(dealer);
-      }
+      activateDealerSubscription(db, payment.dealer_id);
+      const dealer = getDealer(db, payment.dealer_id);
+      if (dealer) await sendSubscriptionConfirmationEmail(dealer);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to verify payment' });
@@ -95,13 +94,12 @@ function createApp(db) {
 
   app.post('/api/payments/:id/reject', async (req, res) => {
     const payId = parseInt(req.params.id);
-    const { dealer_id } = req.body;
     try {
+      const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
+      if (!payment) return res.status(404).json({ error: 'Payment not found' });
       rejectPayment(db, payId);
-      if (dealer_id) {
-        const dealer = getDealer(db, parseInt(dealer_id));
-        if (dealer) await sendPaymentRejectedEmail(dealer);
-      }
+      const dealer = getDealer(db, payment.dealer_id);
+      if (dealer) await sendPaymentRejectedEmail(dealer);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to reject payment' });

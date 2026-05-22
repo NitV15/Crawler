@@ -59,7 +59,7 @@ test('POST /api/payments submits UTR', async () => {
 test('POST /api/payments/:id/verify activates subscription', async () => {
   const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
   const { lastInsertRowid: payId } = addPayment(db, { dealerId, utrNumber: 'UTR456' });
-  const res = await request(app).post(`/api/payments/${payId}/verify`).send({ dealer_id: dealerId });
+  const res = await request(app).post(`/api/payments/${payId}/verify`).send({});
   expect(res.status).toBe(200);
   const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(dealerId);
   expect(dealer.subscription_status).toBe('active');
@@ -68,7 +68,7 @@ test('POST /api/payments/:id/verify activates subscription', async () => {
 test('POST /api/payments/:id/reject sets status rejected', async () => {
   const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
   const { lastInsertRowid: payId } = addPayment(db, { dealerId, utrNumber: 'UTR789' });
-  const res = await request(app).post(`/api/payments/${payId}/reject`).send({ dealer_id: dealerId });
+  const res = await request(app).post(`/api/payments/${payId}/reject`).send({});
   expect(res.status).toBe(200);
   const p = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
   expect(p.status).toBe('rejected');

@@ -71,22 +71,30 @@
       btn.textContent = 'Submitting...';
       msg.style.display = 'none';
 
-      const data = { dealer_id: dealerId, utr_number: e.target.utr_number.value.trim() };
-      const res = await fetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const json = await res.json();
-      msg.style.display = 'block';
-      if (json.success) {
-        msg.className = 'success';
-        msg.textContent = 'Payment submitted! Admin will verify within 24 hours. You will receive a confirmation email.';
-        e.target.reset();
-        btn.textContent = 'Submitted';
-      } else {
+      try {
+        const data = { dealer_id: dealerId, utr_number: e.target.utr_number.value.trim() };
+        const res = await fetch('/api/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const json = await res.json();
+        msg.style.display = 'block';
+        if (json.success) {
+          msg.className = 'success';
+          msg.textContent = 'Payment submitted! Admin will verify within 24 hours. You will receive a confirmation email.';
+          e.target.reset();
+          btn.textContent = 'Submitted';
+        } else {
+          msg.className = 'error';
+          msg.textContent = json.error || 'Submission failed. Please try again.';
+          btn.disabled = false;
+          btn.textContent = 'Submit Payment';
+        }
+      } catch (err) {
+        msg.style.display = 'block';
         msg.className = 'error';
-        msg.textContent = json.error || 'Submission failed. Please try again.';
+        msg.textContent = 'Network error. Please check your connection and try again.';
         btn.disabled = false;
         btn.textContent = 'Submit Payment';
       }

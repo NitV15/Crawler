@@ -1,95 +1,158 @@
-jest.mock('snoowrap');
 jest.mock('../db');
 jest.mock('../matcher');
+jest.mock('../dealer-matcher');
 jest.mock('../mailer');
+jest.mock('../prefilter');
+jest.mock('../subreddits');
 
-const Snoowrap = require('snoowrap');
-const { runCrawl } = require('../crawler');
+const { runCrawl, checkSubscription } = require('../crawler');
 const db = require('../db');
-const { matchPost } = require('../matcher');
+const { identifyLead } = require('../matcher');
+const { matchDealers } = require('../dealer-matcher');
 const { sendLeadEmail } = require('../mailer');
+const { shouldCheckPost } = require('../prefilter');
+const { buildSubredditList } = require('../subreddits');
 
 const fakeDb = {};
-const fakeDealer = { id: 1, name: 'Travel Co', industry: 'Travel', emails: 'test@test.com', description: 'Travel packages' };
+const freeDealer = {
+  id: 1, name: 'Travel Co', emails: 'a@b.com',
+  industry_category: 'Travel & Tourism', lead_count: 0,
+  subscription_status: 'free', subscription_expires_at: null
+};
 
-function mockRedditPosts(posts) {
-  Snoowrap.mockImplementation(() => ({
-    getSubreddit: () => ({ getNew: jest.fn().mockResolvedValue(posts) }),
-  }));
+function mockFetch(posts) {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve({ data: { children: posts.map(p => ({ data: p })) } }),
+  });
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   db.openDb.mockReturnValue(fakeDb);
-  db.getActiveDealers.mockReturnValue([fakeDealer]);
+  db.getActiveDealers.mockReturnValue([freeDealer]);
+  db.getDealer.mockReturnValue(freeDealer);
   db.isSeenPost.mockReturnValue(false);
   db.markPostSeen.mockImplementation(() => {});
   db.saveLead.mockImplementation(() => {});
+  db.incrementDealerLeadCount.mockImplementation(() => {});
+  db.resetDealerSubscription.mockImplementation(() => {});
   sendLeadEmail.mockResolvedValue();
+  shouldCheckPost.mockReturnValue(true);
+  buildSubredditList.mockReturnValue(['india']);
+  identifyLead.mockResolvedValue({ is_lead: false, is_hiring_post: false });
+  matchDealers.mockResolvedValue([]);
+});
+
+describe('checkSubscription', () => {
+  test('returns send for lead_count 0', () => {
+    expect(checkSubscription({ lead_count: 0, subscription_status: 'free', subscription_expires_at: null })).toBe('send');
+  });
+  test('returns send for lead_count 1', () => {
+    expect(checkSubscription({ lead_count: 1, subscription_status: 'free', subscription_expires_at: null })).toBe('send');
+  });
+  test('returns send_with_footer for lead_count 2', () => {
+    expect(checkSubscription({ lead_count: 2, subscription_status: 'free', subscription_expires_at: null })).toBe('send_with_footer');
+  });
+  test('returns skip for lead_count 3 on free tier', () => {
+    expect(checkSubscription({ lead_count: 3, subscription_status: 'free', subscription_expires_at: null })).toBe('skip');
+  });
+  test('returns send for active unexpired subscription', () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    expect(checkSubscription({ lead_count: 99, subscription_status: 'active', subscription_expires_at: future })).toBe('send');
+  });
+  test('returns expired for active but expired subscription', () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    expect(checkSubscription({ lead_count: 5, subscription_status: 'active', subscription_expires_at: past })).toBe('expired');
+  });
 });
 
 describe('runCrawl', () => {
-  test('skips all subreddits when no active dealers', async () => {
+  test('returns early with zero counts when no active dealers', async () => {
     db.getActiveDealers.mockReturnValue([]);
-    const mockGetSubreddit = jest.fn();
-    Snoowrap.mockImplementation(() => ({ getSubreddit: mockGetSubreddit }));
-
-    await runCrawl();
-    expect(mockGetSubreddit).not.toHaveBeenCalled();
+    global.fetch = jest.fn();
+    const result = await runCrawl(fakeDb);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(result.fetched).toBe(0);
   });
 
-  test('marks each new post as seen', async () => {
-    mockRedditPosts([{ id: 'abc', title: 'Test', selftext: 'body', permalink: '/r/test/abc' }]);
-    matchPost.mockResolvedValue({ matched: false });
-
-    await runCrawl();
+  test('marks posts seen even when not a lead', async () => {
+    mockFetch([{ id: 'abc', title: 'Hello', selftext: '', permalink: '/r/india/abc' }]);
+    await runCrawl(fakeDb);
     expect(db.markPostSeen).toHaveBeenCalledWith(fakeDb, 'abc');
   });
 
-  test('skips posts already in seen_posts', async () => {
+  test('skips already seen posts', async () => {
     db.isSeenPost.mockReturnValue(true);
-    mockRedditPosts([{ id: 'old', title: 'Old', selftext: 'body', permalink: '/r/test/old' }]);
-
-    await runCrawl();
-    expect(matchPost).not.toHaveBeenCalled();
+    mockFetch([{ id: 'old', title: 'Old', selftext: '', permalink: '/r/india/old' }]);
+    await runCrawl(fakeDb);
+    expect(identifyLead).not.toHaveBeenCalled();
   });
 
-  test('saves lead and sends email when AI returns a match', async () => {
-    mockRedditPosts([{ id: 'xyz', title: 'Love travelling', selftext: 'big trip planned', permalink: '/r/india/xyz' }]);
-    matchPost.mockResolvedValue({ matched: true, dealer_id: 1, reason: 'Travel intent', suggested_reply: 'We can help!' });
-
-    await runCrawl();
-
-    expect(db.saveLead).toHaveBeenCalledWith(fakeDb, expect.objectContaining({
-      dealerId: 1,
-      redditPostId: 'xyz',
-      subreddit: expect.any(String),
-    }));
-    expect(sendLeadEmail).toHaveBeenCalledWith(expect.objectContaining({
-      dealer: fakeDealer,
-      matchReason: 'Travel intent',
-      suggestedReply: 'We can help!',
-    }));
-  });
-
-  test('does not send email when no match', async () => {
-    mockRedditPosts([{ id: 'nomatch', title: 'What is 2+2', selftext: '', permalink: '/r/AskReddit/nomatch' }]);
-    matchPost.mockResolvedValue({ matched: false });
-
-    await runCrawl();
+  test('discards hiring posts', async () => {
+    mockFetch([{ id: 'h1', title: 'Hiring devs', selftext: '', permalink: '/r/india/h1' }]);
+    identifyLead.mockResolvedValue({ is_lead: true, is_hiring_post: true });
+    await runCrawl(fakeDb);
+    expect(matchDealers).not.toHaveBeenCalled();
     expect(sendLeadEmail).not.toHaveBeenCalled();
   });
 
-  test('continues to next post if matcher throws', async () => {
-    mockRedditPosts([
-      { id: 'bad', title: 'Error post', selftext: '', permalink: '/r/test/bad' },
-      { id: 'good', title: 'Good post', selftext: 'I want to travel', permalink: '/r/india/good' },
-    ]);
-    matchPost
-      .mockRejectedValueOnce(new Error('Gemini timeout'))
-      .mockResolvedValueOnce({ matched: false });
+  test('saves unmatched lead when no dealers matched', async () => {
+    mockFetch([{ id: 'u1', title: 'Need wardrobe', selftext: '', permalink: '/r/india/u1' }]);
+    identifyLead.mockResolvedValue({
+      is_lead: true, is_hiring_post: false,
+      lead_category: 'Furniture & Home Decor', what_to_sell: 'wardrobe',
+      suggested_reply: 'We can help', post_location: null
+    });
+    matchDealers.mockResolvedValue([]);
+    await runCrawl(fakeDb);
+    expect(db.saveLead).toHaveBeenCalledWith(fakeDb, expect.objectContaining({ status: 'unmatched', dealerId: null }));
+    expect(sendLeadEmail).not.toHaveBeenCalled();
+  });
 
-    await expect(runCrawl()).resolves.not.toThrow();
-    expect(matchPost).toHaveBeenCalledTimes(2);
+  test('sends email and increments lead_count for free tier send', async () => {
+    mockFetch([{ id: 'x1', title: 'Need wardrobe', selftext: '', permalink: '/r/Faridabad/x1' }]);
+    identifyLead.mockResolvedValue({
+      is_lead: true, is_hiring_post: false,
+      lead_category: 'Furniture & Home Decor', what_to_sell: 'wardrobe',
+      suggested_reply: 'We can help', post_location: 'Faridabad'
+    });
+    matchDealers.mockResolvedValue([1]);
+    await runCrawl(fakeDb);
+    expect(sendLeadEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: false }));
+    expect(db.incrementDealerLeadCount).toHaveBeenCalledWith(fakeDb, 1);
+  });
+
+  test('sends email with subscribe footer at lead_count 2', async () => {
+    const dealer2 = { ...freeDealer, lead_count: 2 };
+    db.getDealer.mockReturnValue(dealer2);
+    matchDealers.mockResolvedValue([1]);
+    mockFetch([{ id: 'x2', title: 'Need sofa', selftext: '', permalink: '/r/india/x2' }]);
+    identifyLead.mockResolvedValue({
+      is_lead: true, is_hiring_post: false, lead_category: 'Furniture & Home Decor',
+      what_to_sell: 'sofa', suggested_reply: 'We have sofas', post_location: null
+    });
+    await runCrawl(fakeDb);
+    expect(sendLeadEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: true }));
+  });
+
+  test('saves as unmatched and resets when subscription expired', async () => {
+    const expiredDealer = { ...freeDealer, lead_count: 5, subscription_status: 'active', subscription_expires_at: new Date(Date.now() - 1000).toISOString() };
+    db.getDealer.mockReturnValue(expiredDealer);
+    matchDealers.mockResolvedValue([1]);
+    mockFetch([{ id: 'x3', title: 'Need gym', selftext: '', permalink: '/r/india/x3' }]);
+    identifyLead.mockResolvedValue({
+      is_lead: true, is_hiring_post: false, lead_category: 'Fitness & Gym',
+      what_to_sell: 'membership', suggested_reply: 'Join us', post_location: null
+    });
+    await runCrawl(fakeDb);
+    expect(db.resetDealerSubscription).toHaveBeenCalledWith(fakeDb, 1);
+    expect(sendLeadEmail).not.toHaveBeenCalled();
+  });
+
+  test('returns summary object', async () => {
+    mockFetch([]);
+    const result = await runCrawl(fakeDb);
+    expect(result).toEqual(expect.objectContaining({ fetched: 0, filtered: 0, leads: 0, emails: 0, unmatched: 0 }));
   });
 });

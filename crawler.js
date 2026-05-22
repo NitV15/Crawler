@@ -1,89 +1,153 @@
 require('dotenv').config();
-const Snoowrap = require('snoowrap');
-const { openDb, getActiveDealers, isSeenPost, markPostSeen, saveLead } = require('./db');
-const { matchPost } = require('./matcher');
+const { openDb, getActiveDealers, getDealer, isSeenPost, markPostSeen,
+        saveLead, incrementDealerLeadCount, resetDealerSubscription } = require('./db');
+const { shouldCheckPost } = require('./prefilter');
+const { buildSubredditList } = require('./subreddits');
+const { identifyLead } = require('./matcher');
+const { matchDealers } = require('./dealer-matcher');
 const { sendLeadEmail } = require('./mailer');
 
-const SUBREDDITS = ['entrepreneur', 'smallbusiness', 'startups', 'AskIndia', 'india', 'AskReddit'];
 const POST_LIMIT = 25;
+const TARGET_POSTS = 150;
+const USER_AGENT = process.env.REDDIT_USER_AGENT || 'crawler-bot/1.0';
 
-function createRedditClient() {
-  return new Snoowrap({
-    userAgent: process.env.REDDIT_USER_AGENT || 'crawler-bot/1.0',
-    clientId: process.env.REDDIT_CLIENT_ID,
-    clientSecret: process.env.REDDIT_CLIENT_SECRET,
-    username: process.env.REDDIT_USERNAME,
-    password: process.env.REDDIT_PASSWORD,
-  });
+async function fetchSubredditPosts(subreddit) {
+  const url = `https://www.reddit.com/r/${subreddit}/new.json?limit=${POST_LIMIT}`;
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  return json.data.children.map(c => ({ ...c.data, _subreddit: subreddit }));
 }
 
-async function runCrawl() {
-  const db = openDb();
-  const dealers = getActiveDealers(db);
+async function collectPosts(dealers) {
+  const postMap = new Map();
+  for (const sub of buildSubredditList(dealers)) {
+    if (postMap.size >= TARGET_POSTS) break;
+    try {
+      const posts = await fetchSubredditPosts(sub);
+      posts.forEach(p => { if (!postMap.has(p.id)) postMap.set(p.id, p); });
+    } catch (err) {
+      console.error(`[crawler] Failed r/${sub}: ${err.message}`);
+    }
+  }
+  return [...postMap.values()].slice(0, TARGET_POSTS);
+}
+
+function checkSubscription(dealer) {
+  const { lead_count, subscription_status, subscription_expires_at } = dealer;
+  if (subscription_status === 'active') {
+    if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
+    return 'expired';
+  }
+  if (lead_count < 2) return 'send';
+  if (lead_count === 2) return 'send_with_footer';
+  return 'skip';
+}
+
+async function runCrawl(db) {
+  const resolvedDb = db || openDb();
+  const dealers = getActiveDealers(resolvedDb);
 
   if (!dealers.length) {
-    console.log('[crawler] No active dealers. Skipping run.');
-    return;
+    console.log('[crawler] No active dealers.');
+    return { fetched: 0, filtered: 0, leads: 0, emails: 0, unmatched: 0 };
   }
 
-  const reddit = createRedditClient();
-  const seenThisRun = new Set();
-  let processed = 0, matched = 0;
+  const allPosts = await collectPosts(dealers);
 
-  for (const subreddit of SUBREDDITS) {
-    let posts;
+  // Filter BEFORE marking seen — isSeenPost checks the previous run's seen set
+  const filteredPosts = allPosts.filter(p => {
+    if (isSeenPost(resolvedDb, p.id)) return false;
+    if (!p.title && !p.selftext) return false;
+    return shouldCheckPost({ title: p.title || '', text: p.selftext || '' }, dealers);
+  });
+
+  // Mark all fetched posts seen so the next run skips them
+  allPosts.forEach(p => markPostSeen(resolvedDb, p.id));
+
+  let leads = 0, emails = 0, unmatched = 0;
+
+  for (const post of filteredPosts) {
+    const subreddit = post._subreddit || 'unknown';
+    const postTitle = post.title || '';
+    const postText = post.selftext || '';
+    const postUrl = `https://reddit.com${post.permalink}`;
+
     try {
-      posts = await reddit.getSubreddit(subreddit).getNew({ limit: POST_LIMIT });
-    } catch (err) {
-      console.error(`[crawler] Failed to fetch r/${subreddit}: ${err.message}`);
-      continue;
-    }
+      const lead = await identifyLead({ postTitle, postText, subreddit });
+      if (!lead.is_lead || lead.is_hiring_post) continue;
+      leads++;
 
-    for (const post of posts) {
-      const postId = post.id;
-      if (seenThisRun.has(postId) || isSeenPost(db, postId)) continue;
-      const postTitle = post.title || '';
-      const postText = post.selftext || '';
-      if (!postTitle && !postText) continue;
+      const matchedIds = await matchDealers({ ...lead, subreddit }, resolvedDb);
 
-      seenThisRun.add(postId);
-      markPostSeen(db, postId);
-      processed++;
+      if (!matchedIds.length) {
+        saveLead(resolvedDb, {
+          dealerId: null, redditPostId: post.id, postTitle, postText: postText.slice(0, 500),
+          postUrl, subreddit, matchReason: null, suggestedReply: lead.suggested_reply,
+          whatToSell: lead.what_to_sell, leadCategory: lead.lead_category,
+          postLocation: lead.post_location, status: 'unmatched',
+        });
+        unmatched++;
+        continue;
+      }
 
-      try {
-        const match = await matchPost({ postTitle, postText, subreddit }, dealers);
-        if (!match?.matched) continue;
-
-        const dealer = dealers.find(d => d.id === match.dealer_id);
+      for (const dealerId of matchedIds) {
+        const dealer = getDealer(resolvedDb, dealerId);
         if (!dealer) continue;
 
-        saveLead(db, {
-          dealerId: dealer.id,
-          redditPostId: postId,
-          postTitle,
-          postText: postText.slice(0, 500),
-          postUrl: `https://reddit.com${post.permalink}`,
-          subreddit,
-          matchReason: match.reason,
-          suggestedReply: match.suggested_reply,
+        const action = checkSubscription(dealer);
+
+        if (action === 'expired') {
+          resetDealerSubscription(resolvedDb, dealerId);
+          saveLead(resolvedDb, {
+            dealerId: null, redditPostId: post.id, postTitle, postText: postText.slice(0, 500),
+            postUrl, subreddit, matchReason: null, suggestedReply: lead.suggested_reply,
+            whatToSell: lead.what_to_sell, leadCategory: lead.lead_category,
+            postLocation: lead.post_location, status: 'unmatched',
+          });
+          unmatched++;
+          continue;
+        }
+
+        if (action === 'skip') {
+          saveLead(resolvedDb, {
+            dealerId: null, redditPostId: post.id, postTitle, postText: postText.slice(0, 500),
+            postUrl, subreddit, matchReason: null, suggestedReply: lead.suggested_reply,
+            whatToSell: lead.what_to_sell, leadCategory: lead.lead_category,
+            postLocation: lead.post_location, status: 'unmatched',
+          });
+          unmatched++;
+          continue;
+        }
+
+        const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+        saveLead(resolvedDb, {
+          dealerId: dealer.id, redditPostId: post.id, postTitle, postText: postText.slice(0, 500),
+          postUrl, subreddit, matchReason: `Category: ${lead.lead_category}`, suggestedReply: lead.suggested_reply,
+          whatToSell: lead.what_to_sell, leadCategory: lead.lead_category,
+          postLocation: lead.post_location, status: 'matched',
         });
 
         await sendLeadEmail({
           dealer,
-          post: { title: postTitle, text: postText, subreddit, url: `https://reddit.com${post.permalink}` },
-          matchReason: match.reason,
-          suggestedReply: match.suggested_reply,
+          post: { title: postTitle, text: postText, subreddit, url: postUrl, whatToSell: lead.what_to_sell },
+          suggestedReply: lead.suggested_reply,
+          includeSubscribeFooter: action === 'send_with_footer',
+          paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
         });
 
-        matched++;
-        console.log(`[crawler] ✓ Match: r/${subreddit} → ${dealer.name} | ${match.reason}`);
-      } catch (err) {
-        console.error(`[crawler] Error on post ${postId}: ${err.message}`);
+        incrementDealerLeadCount(resolvedDb, dealer.id);
+        emails++;
+        console.log(`[crawler] ✓ ${dealer.name} | ${lead.what_to_sell}`);
       }
+    } catch (err) {
+      console.error(`[crawler] Error on post ${post.id}: ${err.message}`);
     }
   }
 
-  console.log(`[crawler] Run complete — processed: ${processed}, matched: ${matched}`);
+  const summary = { fetched: allPosts.length, filtered: filteredPosts.length, leads, emails, unmatched };
+  console.log(`[crawler] Done — ${JSON.stringify(summary)}`);
+  return summary;
 }
 
-module.exports = { runCrawl };
+module.exports = { runCrawl, fetchSubredditPosts, collectPosts, checkSubscription };

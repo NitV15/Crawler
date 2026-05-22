@@ -1,45 +1,29 @@
-const nodemailer = require('nodemailer');
-const { sendLeadEmail } = require('../mailer');
+const { buildEmailText } = require('../mailer');
 
-jest.mock('nodemailer');
+const dealer = { name: 'Test Co', emails: 'a@b.com', industry_category: 'Furniture & Home Decor' };
+const post = { title: 'Need wardrobe', text: '', subreddit: 'Faridabad', url: 'http://reddit.com/x', whatToSell: 'modular wardrobe' };
 
-describe('sendLeadEmail', () => {
-  const mockSendMail = jest.fn().mockResolvedValue({ messageId: 'test-id' });
+test('buildEmailText includes post title and suggested reply', () => {
+  const text = buildEmailText({ dealer, post, suggestedReply: 'We can help!', includeSubscribeFooter: false });
+  expect(text).toContain('Need wardrobe');
+  expect(text).toContain('We can help!');
+});
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    nodemailer.createTransport.mockReturnValue({ sendMail: mockSendMail });
-    process.env.SMTP_USER = 'bot@gmail.com';
-    process.env.SMTP_PASS = 'secret';
+test('buildEmailText includes subscribe footer when flag is true', () => {
+  const text = buildEmailText({
+    dealer, post, suggestedReply: 'Hi!',
+    includeSubscribeFooter: true, paymentLink: 'http://localhost:3000/pay?dealer_id=1'
   });
+  expect(text).toContain("You've used your 2 free leads");
+  expect(text).toContain('http://localhost:3000/pay?dealer_id=1');
+});
 
-  test('sends one email to all dealer addresses', async () => {
-    await sendLeadEmail({
-      dealer: { name: 'Nitin Tanwar', industry: 'Travel', emails: 'a@test.com,b@test.com' },
-      post: { title: 'I love travelling', text: '', subreddit: 'india', url: 'https://reddit.com/r/india/abc' },
-      matchReason: 'User expressed travel interest',
-      suggestedReply: 'We offer great travel packages!',
-    });
+test('buildEmailText omits subscribe footer when flag is false', () => {
+  const text = buildEmailText({ dealer, post, suggestedReply: 'Hi!', includeSubscribeFooter: false });
+  expect(text).not.toContain("You've used your 2 free leads");
+});
 
-    expect(mockSendMail).toHaveBeenCalledTimes(1);
-    const mail = mockSendMail.mock.calls[0][0];
-    expect(mail.to).toBe('a@test.com, b@test.com');
-    expect(mail.subject).toContain('Travel');
-    expect(mail.subject).toContain('🎯');
-    expect(mail.text).toContain('https://reddit.com/r/india/abc');
-    expect(mail.text).toContain('User expressed travel interest');
-    expect(mail.text).toContain('We offer great travel packages!');
-  });
-
-  test('uses post text when title is empty', async () => {
-    await sendLeadEmail({
-      dealer: { name: 'Test', industry: 'Gym', emails: 'x@test.com' },
-      post: { title: '', text: 'Looking to buy gym equipment', subreddit: 'entrepreneur', url: 'https://reddit.com/r/entrepreneur/xyz' },
-      matchReason: 'Gym equipment buyer',
-      suggestedReply: 'Check our catalogue!',
-    });
-
-    const mail = mockSendMail.mock.calls[0][0];
-    expect(mail.text).toContain('Looking to buy gym equipment');
-  });
+test('buildEmailText includes what_to_sell from post', () => {
+  const text = buildEmailText({ dealer, post, suggestedReply: 'Hi!', includeSubscribeFooter: false });
+  expect(text).toContain('modular wardrobe');
 });

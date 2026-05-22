@@ -3,51 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Register as Dealer — Crawler</title>
+  <title>Register as Dealer</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,sans-serif;background:#f5f5f5;display:flex;justify-content:center;padding:40px 20px}
-    .card{background:#fff;border-radius:12px;padding:32px;width:100%;max-width:480px;box-shadow:0 2px 12px rgba(0,0,0,.1)}
-    h1{font-size:1.5rem;margin-bottom:8px}
-    p{color:#666;margin-bottom:24px;font-size:.9rem}
-    label{display:block;font-size:.85rem;font-weight:600;color:#333;margin-bottom:4px}
-    input,textarea{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:.95rem;margin-bottom:16px}
-    textarea{height:100px;resize:vertical}
-    button{width:100%;padding:12px;background:#ff4500;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer}
-    button:hover{background:#e03d00}
-    .msg{display:none;text-align:center;margin-top:16px;font-size:.9rem}
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    textarea { height: 80px; resize: vertical; }
+    button { margin-top: 24px; padding: 10px 28px; background: #1a73e8; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    button:hover { background: #1558b0; }
+    #msg { margin-top: 16px; padding: 10px; border-radius: 4px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    small { color: #666; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Register as Dealer</h1>
-    <p>Get notified when we find potential buyers for your products on Reddit.</p>
-    <form id="form">
-      <label>Business Name</label>
-      <input type="text" name="name" placeholder="e.g. FitZone Equipment" required>
-      <label>Email Address(es)</label>
-      <input type="text" name="emails" placeholder="owner@fitzone.com, sales@fitzone.com" required>
-      <label>Industry</label>
-      <input type="text" name="industry" placeholder="e.g. Gym Equipment, Travel Agency" required>
-      <label>Describe your products / services</label>
-      <textarea name="description" placeholder="e.g. We sell gym equipment — treadmills, dumbbells, resistance bands, gym mats, and complete home gym setups." required></textarea>
-      <button type="submit">Register</button>
-    </form>
-    <div class="msg" id="ok" style="color:green">✅ Registered! We'll email you when we find leads.</div>
-    <div class="msg" id="err" style="color:red">❌ Registration failed. Please try again.</div>
-  </div>
+  <h2>Register as a Dealer</h2>
+  <form id="form">
+    <label>Business Name *<input name="name" required></label>
+    <label>Email Address(es) * <small>(comma-separated for multiple)</small><input name="emails" type="email" required></label>
+
+    <label>Industry Category *
+      <select name="industry_category" required>
+        <option value="">— Select category —</option>
+        <option>Automotive</option><option>Real Estate</option>
+        <option>Travel &amp; Tourism</option><option>Education &amp; Coaching</option>
+        <option>Healthcare &amp; Wellness</option><option>Finance &amp; Insurance</option>
+        <option>IT Services &amp; Software</option><option>Furniture &amp; Home Decor</option>
+        <option>Fitness &amp; Gym</option><option>Food &amp; Catering</option>
+        <option>Construction &amp; Interior Design</option><option>Legal Services</option>
+        <option>Electronics &amp; Gadgets</option><option>Clothing &amp; Fashion</option>
+        <option>Beauty &amp; Salon</option><option>Marketing &amp; Advertising</option>
+        <option>Photography &amp; Events</option><option>Logistics &amp; Packers Movers</option>
+        <option>HR &amp; Staffing</option><option>Retail &amp; E-commerce</option>
+        <option>Other</option>
+      </select>
+    </label>
+
+    <label>State *
+      <select name="state" id="stateSelect" required>
+        <option value="">— Select state —</option>
+      </select>
+    </label>
+
+    <label>City *
+      <select name="city" id="citySelect" required>
+        <option value="">— Select state first —</option>
+      </select>
+    </label>
+
+    <label>Service Areas <small>(sectors, villages, localities you cover — comma separated)</small>
+      <input name="service_areas" placeholder="e.g. Sector 15, Ballabhgarh, Tigaon village">
+    </label>
+
+    <label>Services Offered *
+      <textarea name="services" required placeholder="e.g. office chairs, wooden tables, modular wardrobes"></textarea>
+    </label>
+
+    <label>Target Customers
+      <input name="target_customers" placeholder="e.g. small businesses in Faridabad">
+    </label>
+
+    <label>Keywords * <small>(comma separated — what customers search for)</small>
+      <input name="keywords" required placeholder="e.g. chair, sofa, wardrobe, furniture">
+    </label>
+
+    <label>Custom Subreddits <small>(optional extras beyond your city — comma separated, no r/)</small>
+      <input name="custom_subreddits" placeholder="e.g. IndiaInvestments, delhi">
+    </label>
+
+    <button type="submit">Register</button>
+    <div id="msg"></div>
+  </form>
+
   <script>
+    const CITIES_BY_STATE = {
+      'Andhra Pradesh': ['Vijayawada','Visakhapatnam','Guntur','Nellore','Kurnool','Rajahmundry','Tirupati'],
+      'Arunachal Pradesh': ['Itanagar'],
+      'Assam': ['Guwahati','Silchar','Dibrugarh','Jorhat'],
+      'Bihar': ['Patna','Gaya','Muzaffarpur','Bhagalpur','Darbhanga'],
+      'Chhattisgarh': ['Raipur','Bhilai','Bilaspur','Durg'],
+      'Delhi (NCT)': ['New Delhi','Delhi'],
+      'Goa': ['Panaji','Margao','Vasco da Gama'],
+      'Gujarat': ['Ahmedabad','Surat','Vadodara','Rajkot','Bhavnagar','Jamnagar','Gandhinagar','Anand'],
+      'Haryana': ['Faridabad','Gurugram','Panipat','Ambala','Yamunanagar','Rohtak','Hisar','Karnal','Sonipat','Panchkula','Rewari'],
+      'Himachal Pradesh': ['Shimla','Dharamsala','Manali','Solan','Mandi'],
+      'Jharkhand': ['Ranchi','Jamshedpur','Dhanbad','Bokaro'],
+      'Karnataka': ['Bengaluru','Mysuru','Hubballi','Mangaluru','Belagavi','Davangere','Ballari'],
+      'Kerala': ['Thiruvananthapuram','Kochi','Kozhikode','Thrissur','Kollam','Palakkad'],
+      'Madhya Pradesh': ['Bhopal','Indore','Jabalpur','Gwalior','Ujjain','Sagar'],
+      'Maharashtra': ['Mumbai','Pune','Nagpur','Nashik','Aurangabad','Solapur','Thane','Navi Mumbai','Kolhapur'],
+      'Manipur': ['Imphal'],
+      'Meghalaya': ['Shillong'],
+      'Mizoram': ['Aizawl'],
+      'Nagaland': ['Kohima','Dimapur'],
+      'Odisha': ['Bhubaneswar','Cuttack','Rourkela','Berhampur','Sambalpur'],
+      'Punjab': ['Ludhiana','Amritsar','Jalandhar','Patiala','Bathinda','Mohali'],
+      'Rajasthan': ['Jaipur','Jodhpur','Udaipur','Kota','Ajmer','Bikaner','Alwar','Bhilwara'],
+      'Sikkim': ['Gangtok'],
+      'Tamil Nadu': ['Chennai','Coimbatore','Madurai','Tiruchirappalli','Salem','Tirunelveli','Vellore','Erode'],
+      'Telangana': ['Hyderabad','Warangal','Karimnagar','Nizamabad','Khammam'],
+      'Tripura': ['Agartala'],
+      'Uttar Pradesh': ['Lucknow','Kanpur','Agra','Varanasi','Prayagraj','Meerut','Noida','Ghaziabad','Mathura','Aligarh','Moradabad','Bareilly'],
+      'Uttarakhand': ['Dehradun','Haridwar','Rishikesh','Roorkee','Haldwani','Nainital'],
+      'West Bengal': ['Kolkata','Howrah','Durgapur','Asansol','Siliguri','Bardhaman'],
+      'Andaman and Nicobar Islands': ['Port Blair'],
+      'Chandigarh': ['Chandigarh'],
+      'Dadra and Nagar Haveli and Daman and Diu': ['Daman','Diu','Silvassa'],
+      'Jammu and Kashmir': ['Srinagar','Jammu'],
+      'Ladakh': ['Leh','Kargil'],
+      'Lakshadweep': ['Kavaratti'],
+      'Puducherry': ['Puducherry'],
+    };
+
+    const stateSelect = document.getElementById('stateSelect');
+    const citySelect = document.getElementById('citySelect');
+
+    Object.keys(CITIES_BY_STATE).sort().forEach(state => {
+      const opt = document.createElement('option');
+      opt.value = state; opt.textContent = state;
+      stateSelect.appendChild(opt);
+    });
+
+    stateSelect.addEventListener('change', () => {
+      const cities = CITIES_BY_STATE[stateSelect.value] || [];
+      citySelect.innerHTML = '<option value="">— Select city —</option>';
+      cities.forEach(city => {
+        const opt = document.createElement('option');
+        opt.value = city; opt.textContent = city;
+        citySelect.appendChild(opt);
+      });
+    });
+
     document.getElementById('form').addEventListener('submit', async e => {
       e.preventDefault();
-      document.getElementById('ok').style.display = 'none';
-      document.getElementById('err').style.display = 'none';
+      const msg = document.getElementById('msg');
+      msg.style.display = 'none';
+      const data = Object.fromEntries(new FormData(e.target));
       const res = await fetch('/api/register', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
       });
-      document.getElementById(res.ok ? 'ok' : 'err').style.display = 'block';
-      if (res.ok) e.target.reset();
+      const json = await res.json();
+      msg.style.display = 'block';
+      if (json.success) {
+        msg.className = 'success';
+        msg.textContent = 'Registration successful! You will receive leads by email.';
+        e.target.reset();
+        citySelect.innerHTML = '<option value="">— Select state first —</option>';
+      } else {
+        msg.className = 'error';
+        msg.textContent = json.error || 'Registration failed.';
+      }
     });
   </script>
 </body>

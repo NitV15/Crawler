@@ -7,6 +7,7 @@ const { buildSubredditList } = require('./subreddits');
 const { identifyLead } = require('./matcher');
 const { matchDealers } = require('./dealer-matcher');
 const { sendLeadEmail } = require('./mailer');
+const { fetchIndiaMartLeads } = require('./indiamart-fetcher');
 
 const POST_LIMIT = 25;
 const TARGET_POSTS = 150;
@@ -54,8 +55,15 @@ async function runCrawl(db) {
     return { fetched: 0, filtered: 0, leads: 0, emails: 0, unmatched: 0 };
   }
 
-  const allPosts = await collectPosts(dealers);
-  console.log(`[crawler] Fetched ${allPosts.length} posts`);
+  const [redditPosts, indiamartPosts] = await Promise.all([
+    collectPosts(dealers),
+    fetchIndiaMartLeads(dealers).catch(err => {
+      console.error(`[crawler] IndiaMART fetch failed: ${err.message}`);
+      return [];
+    }),
+  ]);
+  const allPosts = [...redditPosts, ...indiamartPosts];
+  console.log(`[crawler] Fetched ${redditPosts.length} Reddit + ${indiamartPosts.length} IndiaMART posts`);
 
   // Save all fetched posts to DB so admin can view and manually send them
   allPosts.forEach(p => saveFetchedPost(resolvedDb, {
@@ -86,7 +94,9 @@ async function runCrawl(db) {
     const subreddit = post._subreddit || 'unknown';
     const postTitle = post.title || '';
     const postText = post.selftext || '';
-    const postUrl = `https://reddit.com${post.permalink}`;
+    const postUrl = post.permalink?.startsWith('http')
+      ? post.permalink
+      : `https://reddit.com${post.permalink}`;
 
     try {
       console.log(`[crawler] Gemini checking: "${postTitle.slice(0, 60)}" (r/${subreddit})`);

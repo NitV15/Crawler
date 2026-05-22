@@ -123,7 +123,7 @@ async function loadMatched() {
   panel.innerHTML = `<table>
     <thead><tr><th>Post</th><th>Subreddit</th><th>Location</th><th>What to Sell</th><th>Dealer</th><th>Suggested Reply</th><th>Date</th></tr></thead>
     <tbody>${leads.map(l => `<tr>
-      <td><a href="${esc(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
+      <td><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
       <td>r/${esc(l.subreddit)}</td>
       <td>${esc(l.post_location||'—')}</td>
       <td>${esc(l.what_to_sell||'—')}</td>
@@ -142,7 +142,7 @@ async function loadUnmatched() {
   panel.innerHTML = `<table>
     <thead><tr><th>Post</th><th>Subreddit</th><th>Location</th><th>What to Sell</th><th>Suggested Reply</th><th>Assign &amp; Send</th></tr></thead>
     <tbody>${leads.map(l => `<tr>
-      <td><a href="${esc(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
+      <td><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
       <td>r/${esc(l.subreddit)}</td>
       <td>${esc(l.post_location||'—')}</td>
       <td>${esc(l.what_to_sell||'—')}</td>
@@ -203,6 +203,10 @@ async function assignLead(leadId) {
 
 function esc(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function safeUrl(url) {
+  const s = String(url || '');
+  return /^https?:\/\//i.test(s) ? esc(s) : '#';
 }
 
 loadDealers();

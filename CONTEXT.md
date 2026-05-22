@@ -96,7 +96,7 @@ Unmatched leads → saved in DB → admin can manually assign to any dealer
 | `mailer.js` | Sends emails via nodemailer/Gmail |
 | `subreddits.js` | City→subreddit map, builds priority subreddit list |
 | `prefilter.js` | Fast keyword + intent phrase filter (no AI cost) |
-| `public/admin.html` | Admin panel — 5 tabs, Run Crawl button |
+| `public/admin.html` | Admin panel — 5 tabs, Run Crawl + Cleanup Old Data buttons |
 | `public/register.html` | Dealer registration form |
 | `public/pay.html` | UPI QR + UTR submission for ₹1 subscription |
 | `public/images/upi-qr.png` | **You must add this** — your UPI QR code image |
@@ -172,6 +172,7 @@ post_id (PRIMARY KEY), checked_at
 | GET | /api/payments | List all payments |
 | POST | /api/payments/:id/verify | Verify payment + activate subscription |
 | POST | /api/payments/:id/reject | Reject payment + email dealer |
+| POST | /api/admin/cleanup | Delete old data + VACUUM |
 | GET | /pay | Payment page (HTML) |
 
 ---
@@ -209,6 +210,41 @@ Retail & E-commerce, Other
 
 ---
 
+## Admin Panel — 5 Tabs + 2 Header Buttons
+
+### Header buttons
+- **Run Crawl** — triggers a full crawl, shows result summary (fetched / filtered / leads / emails / unmatched)
+- **Cleanup Old Data** — deletes stale data with confirmation dialog, shows deleted row counts
+
+### Tabs
+| Tab | What it shows | Actions |
+|-----|--------------|---------|
+| Dealers | All registered dealers with subscription status, leads used, location | Enable/Disable toggle |
+| Matched Leads | Leads sent to dealers by the AI pipeline | View only |
+| Unmatched Leads | Leads the AI found but no dealer matched | Assign to dealer manually |
+| Payments | UTR submissions from dealers | Verify / Reject |
+| Fetched Posts | All raw Reddit posts from every crawl | Send to any dealer manually |
+
+### Fetched Posts → Manual Send flow
+1. Admin clicks **Fetched Posts** tab
+2. Browses the raw posts (title, subreddit, text preview)
+3. Picks a dealer from the dropdown on any row
+4. Clicks **Send** — server runs Gemini on that post to generate a suggested reply, emails the dealer, saves as an assigned lead, counts against their subscription
+
+---
+
+## Cleanup Policy
+
+| Table | Data deleted |
+|-------|-------------|
+| `seen_posts` | Older than 30 days |
+| `fetched_posts` | Older than 60 days |
+| `leads` (unmatched only) | Older than 90 days |
+
+Matched and assigned leads are never deleted by cleanup. Run VACUUM automatically after deletion to reclaim disk space.
+
+---
+
 ## Common Issues
 
 **0 filtered after crawl** — `seen_posts` table has old entries. Clear it:
@@ -221,3 +257,5 @@ node -e "const {openDb}=require('./db'); const db=openDb(); db.prepare('DELETE F
 **Email not sending** — check `SMTP_USER` and `SMTP_PASS` in `.env`. Use Gmail App Password, not your regular Gmail password.
 
 **Claude matching failing** — check `ANTHROPIC_API_KEY` is set and valid.
+
+**Cleanup shows 0 deleted** — data is still within the retention window (less than 30/60/90 days old). This is normal on a fresh install.

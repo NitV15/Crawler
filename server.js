@@ -5,10 +5,12 @@ const {
   openDb, addDealer, getDealers, getLeads, toggleDealer,
   getUnmatchedLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
-  activateDealerSubscription,
+  activateDealerSubscription, saveLead, incrementDealerLeadCount,
+  getFetchedPosts,
 } = require('./db');
-const { runCrawl } = require('./crawler');
-const { sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail } = require('./mailer');
+const { runCrawl, checkSubscription } = require('./crawler');
+const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail } = require('./mailer');
+const { identifyLead } = require('./matcher');
 
 function createApp(db) {
   const app = express();
@@ -111,6 +113,54 @@ function createApp(db) {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to reject payment' });
+    }
+  });
+
+  app.get('/api/fetched-posts', (req, res) => {
+    try { res.json(getFetchedPosts(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
+  });
+
+  app.post('/api/fetched-posts/:id/send', async (req, res) => {
+    const { dealer_id } = req.body;
+    if (!dealer_id) return res.status(400).json({ error: 'dealer_id required' });
+    try {
+      const post = db.prepare('SELECT * FROM fetched_posts WHERE id = ?').get(parseInt(req.params.id));
+      if (!post) return res.status(404).json({ error: 'Post not found' });
+      const dealer = getDealer(db, parseInt(dealer_id));
+      if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
+
+      // Run Gemini to get suggested reply and lead details
+      let leadInfo = { what_to_sell: '', suggested_reply: '', lead_category: 'Other', post_location: null };
+      try {
+        const gemini = await identifyLead({ postTitle: post.post_title, postText: post.post_text, subreddit: post.subreddit });
+        if (gemini.is_lead) leadInfo = gemini;
+      } catch (e) { /* send without AI if Gemini fails */ }
+
+      saveLead(db, {
+        dealerId: dealer.id, redditPostId: post.post_id,
+        postTitle: post.post_title, postText: post.post_text,
+        postUrl: post.post_url, subreddit: post.subreddit,
+        matchReason: 'Manual send from admin',
+        suggestedReply: leadInfo.suggested_reply,
+        whatToSell: leadInfo.what_to_sell,
+        leadCategory: leadInfo.lead_category,
+        postLocation: leadInfo.post_location,
+        status: 'assigned',
+      });
+
+      const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+      const action = checkSubscription(dealer);
+      await sendLeadEmail({
+        dealer,
+        post: { title: post.post_title, text: post.post_text, subreddit: post.subreddit, url: post.post_url, whatToSell: leadInfo.what_to_sell },
+        suggestedReply: leadInfo.suggested_reply || '(Manually sent by admin)',
+        includeSubscribeFooter: action === 'send_with_footer',
+        paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
+      });
+      incrementDealerLeadCount(db, dealer.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 

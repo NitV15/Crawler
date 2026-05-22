@@ -67,6 +67,15 @@ function initSchema(db) {
       verified_at TEXT DEFAULT NULL,
       FOREIGN KEY (dealer_id) REFERENCES dealers(id)
     );
+    CREATE TABLE IF NOT EXISTS fetched_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id TEXT UNIQUE NOT NULL,
+      post_title TEXT,
+      post_text TEXT,
+      post_url TEXT NOT NULL,
+      subreddit TEXT NOT NULL,
+      fetched_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -186,6 +195,17 @@ function assignLead(db, leadId, dealerId) {
   db.prepare(`UPDATE leads SET dealer_id = ?, status = 'assigned' WHERE id = ?`).run(dealerId, leadId);
 }
 
+function saveFetchedPost(db, { postId, postTitle, postText, postUrl, subreddit }) {
+  return db.prepare(`
+    INSERT OR IGNORE INTO fetched_posts (post_id, post_title, post_text, post_url, subreddit)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(postId, postTitle || '', (postText || '').slice(0, 500), postUrl, subreddit);
+}
+
+function getFetchedPosts(db, limit = 200) {
+  return db.prepare('SELECT * FROM fetched_posts ORDER BY id DESC LIMIT ?').all(limit);
+}
+
 function addPayment(db, { dealerId, utrNumber }) {
   return db.prepare(`INSERT INTO payments (dealer_id, utr_number) VALUES (?, ?)`).run(dealerId, utrNumber);
 }
@@ -216,4 +236,5 @@ module.exports = {
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   isSeenPost, markPostSeen, saveLead, getLeads, getUnmatchedLeads, assignLead,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
+  saveFetchedPost, getFetchedPosts,
 };

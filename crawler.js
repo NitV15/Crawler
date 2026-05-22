@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { openDb, getActiveDealers, getDealer, isSeenPost, markPostSeen,
-        saveLead, incrementDealerLeadCount, resetDealerSubscription } = require('./db');
+        saveLead, incrementDealerLeadCount, resetDealerSubscription,
+        saveFetchedPost } = require('./db');
 const { shouldCheckPost } = require('./prefilter');
 const { buildSubredditList } = require('./subreddits');
 const { identifyLead } = require('./matcher');
@@ -54,13 +55,27 @@ async function runCrawl(db) {
   }
 
   const allPosts = await collectPosts(dealers);
+  console.log(`[crawler] Fetched ${allPosts.length} posts`);
+
+  // Save all fetched posts to DB so admin can view and manually send them
+  allPosts.forEach(p => saveFetchedPost(resolvedDb, {
+    postId: p.id,
+    postTitle: p.title || '',
+    postText: p.selftext || '',
+    postUrl: `https://reddit.com${p.permalink}`,
+    subreddit: p._subreddit || 'unknown',
+  }));
 
   // Filter BEFORE marking seen — isSeenPost checks the previous run's seen set
+  let seenCount = 0, emptyCount = 0, prefilterCount = 0;
   const filteredPosts = allPosts.filter(p => {
-    if (isSeenPost(resolvedDb, p.id)) return false;
-    if (!p.title && !p.selftext) return false;
-    return shouldCheckPost({ title: p.title || '', text: p.selftext || '' }, dealers);
+    if (isSeenPost(resolvedDb, p.id)) { seenCount++; return false; }
+    if (!p.title && !p.selftext) { emptyCount++; return false; }
+    const passes = shouldCheckPost({ title: p.title || '', text: p.selftext || '' }, dealers);
+    if (!passes) prefilterCount++;
+    return passes;
   });
+  console.log(`[crawler] Filter breakdown — seen: ${seenCount}, empty: ${emptyCount}, prefilter blocked: ${prefilterCount}, passed: ${filteredPosts.length}`);
 
   // Mark all fetched posts seen so the next run skips them
   allPosts.forEach(p => markPostSeen(resolvedDb, p.id));
@@ -74,11 +89,15 @@ async function runCrawl(db) {
     const postUrl = `https://reddit.com${post.permalink}`;
 
     try {
+      console.log(`[crawler] Gemini checking: "${postTitle.slice(0, 60)}" (r/${subreddit})`);
       const lead = await identifyLead({ postTitle, postText, subreddit });
-      if (!lead.is_lead || lead.is_hiring_post) continue;
+      if (lead.is_hiring_post) { console.log(`[crawler]   → hiring post, skipped`); continue; }
+      if (!lead.is_lead) { console.log(`[crawler]   → not a lead`); continue; }
+      console.log(`[crawler]   → LEAD: ${lead.lead_category} | "${lead.what_to_sell}" | loc: ${lead.post_location || 'none'}`);
       leads++;
 
       const matchedIds = await matchDealers({ ...lead, subreddit }, resolvedDb);
+      console.log(`[crawler]   → matched dealers: ${matchedIds.length ? matchedIds.join(', ') : 'none'}`);
 
       if (!matchedIds.length) {
         saveLead(resolvedDb, {
@@ -96,6 +115,7 @@ async function runCrawl(db) {
         if (!dealer) continue;
 
         const action = checkSubscription(dealer);
+        console.log(`[crawler]   → dealer "${dealer.name}" action: ${action}`);
 
         if (action === 'expired') {
           resetDealerSubscription(resolvedDb, dealerId);

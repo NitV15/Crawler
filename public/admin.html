@@ -51,19 +51,21 @@
   <div class="tab" onclick="switchTab('matched')">Matched Leads</div>
   <div class="tab" onclick="switchTab('unmatched')">Unmatched Leads</div>
   <div class="tab" onclick="switchTab('payments')">Payments</div>
+  <div class="tab" onclick="switchTab('fetched')">Fetched Posts</div>
 </div>
 
 <div id="panel-dealers" class="panel active"><p>Loading...</p></div>
 <div id="panel-matched" class="panel"></div>
 <div id="panel-unmatched" class="panel"></div>
 <div id="panel-payments" class="panel"></div>
+<div id="panel-fetched" class="panel"></div>
 
 <script>
 let allDealers = [];
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['dealers','matched','unmatched','payments'][i] === name);
+    t.classList.toggle('active', ['dealers','matched','unmatched','payments','fetched'][i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
@@ -71,6 +73,7 @@ function switchTab(name) {
   else if (name === 'matched') loadMatched();
   else if (name === 'unmatched') loadUnmatched();
   else if (name === 'payments') loadPayments();
+  else if (name === 'fetched') loadFetchedPosts();
 }
 
 async function triggerCrawl() {
@@ -176,6 +179,60 @@ async function loadPayments() {
       ` : '—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+}
+
+async function loadFetchedPosts() {
+  const posts = await fetch('/api/fetched-posts').then(r => r.json());
+  const panel = document.getElementById('panel-fetched');
+  if (!posts.length) { panel.innerHTML = '<p>No fetched posts yet. Click Run Crawl first.</p>'; return; }
+  const dealerOpts = allDealers.length ? allDealers : await fetch('/api/dealers').then(r => r.json());
+  panel.innerHTML = `<table>
+    <thead><tr>
+      <th>Post</th><th>Subreddit</th><th>Preview</th><th>Fetched</th><th>Send to Dealer</th>
+    </tr></thead>
+    <tbody>${posts.map(p => `<tr>
+      <td style="max-width:220px"><a href="${safeUrl(p.post_url)}" target="_blank">${esc(p.post_title||'(no title)').slice(0,70)}</a></td>
+      <td>r/${esc(p.subreddit)}</td>
+      <td style="max-width:200px;font-size:12px;color:#555">${esc(p.post_text||'').slice(0,100)}${p.post_text&&p.post_text.length>100?'…':''}</td>
+      <td style="white-space:nowrap">${(p.fetched_at||'').slice(0,16).replace('T',' ')}</td>
+      <td style="white-space:nowrap">
+        <select class="assign" id="fp-dealer-${p.id}">
+          <option value="">— Dealer —</option>
+          ${dealerOpts.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+        </select>
+        <button class="action btn-send" id="fp-btn-${p.id}" onclick="sendFetchedPost(${p.id})">Send</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function sendFetchedPost(postId) {
+  const dealerId = document.getElementById('fp-dealer-' + postId).value;
+  if (!dealerId) { alert('Please select a dealer first'); return; }
+  const btn = document.getElementById('fp-btn-' + postId);
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const res = await fetch(`/api/fetched-posts/${postId}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dealer_id: dealerId }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      btn.textContent = 'Sent ✓';
+      btn.style.background = '#e6f4ea';
+      btn.style.color = '#1e7e34';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Send';
+      alert('Error: ' + (json.error || 'Unknown error'));
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+    alert('Network error');
+  }
 }
 
 async function toggleDealer(id, active) {

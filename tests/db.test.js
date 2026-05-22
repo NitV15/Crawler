@@ -17,7 +17,7 @@ afterEach(() => { db.close(); });
 test('openDb creates dealers with new columns', () => {
   const cols = db.prepare('PRAGMA table_info(dealers)').all().map(c => c.name);
   expect(cols).toEqual(expect.arrayContaining([
-    'industry_category','services','keywords','state','city',
+    'industry_category','services','target_customers','keywords','state','city',
     'service_areas','custom_subreddits','lead_count','subscription_status','subscription_expires_at'
   ]));
 });

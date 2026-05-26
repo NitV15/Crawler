@@ -21,7 +21,8 @@ function buildDealerHashtags(dealers) {
   const seen = new Set();
   const hashtags = [];
   for (const dealer of dealers) {
-    const fields = [dealer.industry_category || '', dealer.keywords || ''].join(' ');
+    if (!dealer) continue;
+    const fields = [String(dealer.industry_category || ''), String(dealer.keywords || '')].join(' ');
     fields.toLowerCase().split(/[\s,&\/]+/).forEach(word => {
       const w = word.trim();
       if (w.length > 2 && !STOP_WORDS.has(w) && !seen.has(w)) {

@@ -50,7 +50,7 @@ def fetch_hashtag(session, tag, amount=5):
                 caption_obj = media.get('caption') or {}
                 caption = caption_obj.get('text', '') if isinstance(caption_obj, dict) else ''
                 if pk and code and caption:
-                    medias.append({'pk': str(pk), 'code': code, 'caption': caption[:500]})
+                    medias.append({'pk': str(pk), 'code': code, 'caption': caption[:500], 'title': caption.split('\n')[0][:80]})
                 if len(medias) >= amount:
                     break
             if len(medias) >= amount:
@@ -104,7 +104,7 @@ def main():
                     seen.add(uid)
                     results.append({
                         'id': f'ig_{uid}',
-                        'title': '',
+                        'title': m.get('title', ''),
                         'selftext': m['caption'],
                         'permalink': f'https://www.instagram.com/p/{m["code"]}/',
                         '_subreddit': 'instagram',

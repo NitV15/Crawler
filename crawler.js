@@ -75,7 +75,7 @@ async function runCrawl(db) {
     postId: p.id,
     postTitle: p.title || '',
     postText: p.selftext || '',
-    postUrl: `https://reddit.com${p.permalink}`,
+    postUrl: p.permalink?.startsWith('http') ? p.permalink : `https://reddit.com${p.permalink}`,
     subreddit: p._subreddit || 'unknown',
   }));
 

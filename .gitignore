@@ -1,3 +1,4 @@
 node_modules/
 data/
 .env
+instagram_session.json

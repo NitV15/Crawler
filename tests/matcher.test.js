@@ -50,3 +50,48 @@ test('strips markdown code fences from Gemini response', async () => {
   const result = await identifyLead({ postTitle: 'test', postText: '', subreddit: 'india' });
   expect(result.is_lead).toBe(false);
 });
+
+test('uses INSTAGRAM POST header when source is instagram', async () => {
+  let capturedPrompt = '';
+  GoogleGenAI.mockImplementation(() => ({
+    models: {
+      generateContent: jest.fn().mockImplementation(({ contents }) => {
+        capturedPrompt = contents;
+        return Promise.resolve({ text: JSON.stringify({ is_lead: false, is_hiring_post: false }) });
+      }),
+    },
+  }));
+  await identifyLead({ postTitle: '', postText: 'Just moved to Pune!', subreddit: 'instagram', source: 'instagram' });
+  expect(capturedPrompt).toContain('INSTAGRAM POST');
+  expect(capturedPrompt).toContain('INDIRECT buyer intent');
+  expect(capturedPrompt).not.toContain('REDDIT POST');
+});
+
+test('uses INDIAMART LISTING header when source is indiamart', async () => {
+  let capturedPrompt = '';
+  GoogleGenAI.mockImplementation(() => ({
+    models: {
+      generateContent: jest.fn().mockImplementation(({ contents }) => {
+        capturedPrompt = contents;
+        return Promise.resolve({ text: JSON.stringify({ is_lead: false, is_hiring_post: false }) });
+      }),
+    },
+  }));
+  await identifyLead({ postTitle: 'Need furniture', postText: 'description', subreddit: 'indiamart', source: 'indiamart' });
+  expect(capturedPrompt).toContain('INDIAMART LISTING');
+  expect(capturedPrompt).not.toContain('REDDIT POST');
+});
+
+test('defaults to REDDIT POST header when source is omitted', async () => {
+  let capturedPrompt = '';
+  GoogleGenAI.mockImplementation(() => ({
+    models: {
+      generateContent: jest.fn().mockImplementation(({ contents }) => {
+        capturedPrompt = contents;
+        return Promise.resolve({ text: JSON.stringify({ is_lead: false, is_hiring_post: false }) });
+      }),
+    },
+  }));
+  await identifyLead({ postTitle: 'Need wardrobe', postText: '', subreddit: 'india' });
+  expect(capturedPrompt).toContain('REDDIT POST');
+});

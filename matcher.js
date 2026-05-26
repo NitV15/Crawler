@@ -15,18 +15,25 @@ function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
-async function identifyLead({ postTitle, postText, subreddit }) {
+async function identifyLead({ postTitle, postText, subreddit, source = 'reddit' }) {
   const ai = getAI();
+
+  const sourceContext = source === 'instagram'
+    ? `INSTAGRAM POST:\nHashtag/Search: ${subreddit}\nCaption: ${(postText || '').slice(0, 500)}`
+    : source === 'indiamart'
+    ? `INDIAMART LISTING:\nTitle: ${postTitle || '(no title)'}\nDescription: ${(postText || '').slice(0, 500)}`
+    : `REDDIT POST:\nTitle: ${postTitle || '(no title)'}\nText: ${(postText || '').slice(0, 500)}\nSubreddit: r/${subreddit}`;
+
+  const indirectHint = source === 'instagram'
+    ? `\nFor Instagram posts: also detect INDIRECT buyer intent — "Just moved to Pune" is a lead for movers/furniture, "Goa trip planned" is a lead for travel agents, "Got my license!" is a lead for car dealers/insurance. Classify these as leads even without explicit purchase language.`
+    : '';
 
   const prompt = `You are a lead identification assistant.
 
-REDDIT POST:
-Title: ${postTitle || '(no title)'}
-Text: ${(postText || '').slice(0, 500)}
-Subreddit: r/${subreddit}
+${sourceContext}
 
 TASK:
-1. Is this person looking to BUY or HIRE a product or service? Match based on INTENT not keywords.
+1. Is this person looking to BUY or HIRE a product or service? Match based on INTENT not keywords.${indirectHint}
 2. Is this post someone looking to HIRE AN EMPLOYEE or recruit staff?
 3. If it is a lead — which category? Pick exactly one: ${CATEGORIES.join(', ')}
 4. What can we sell them? (one short phrase)

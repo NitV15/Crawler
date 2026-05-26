@@ -3,7 +3,7 @@ const express = require('express');
 const path = require('path');
 const {
   openDb, addDealer, getDealers, getLeads, toggleDealer,
-  getUnmatchedLeads, assignLead, getDealer,
+  getUnmatchedLeads, getAllLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts,
@@ -37,6 +37,10 @@ function createApp(db) {
 
   app.get('/api/leads', (req, res) => {
     try { res.json(getLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
+  });
+
+  app.get('/api/leads/all', (req, res) => {
+    try { res.json(getAllLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
   app.get('/api/leads/unmatched', (req, res) => {

@@ -15,8 +15,8 @@
     #cleanupBtn:hover { background: rgba(255,255,255,0.25); }
     #cleanupBtn:disabled { opacity: 0.5; cursor: not-allowed; }
     #crawlResult { font-size: 13px; margin-left: 12px; color: #e8f0fe; }
-    .tabs { display: flex; background: #fff; border-bottom: 2px solid #ddd; padding: 0 24px; }
-    .tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #555; }
+    .tabs { display: flex; background: #fff; border-bottom: 2px solid #ddd; padding: 0 24px; overflow-x: auto; }
+    .tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #555; white-space: nowrap; }
     .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
     .panel { display: none; padding: 24px; }
     .panel.active { display: block; }
@@ -30,6 +30,9 @@
     .badge-pending { background: #fff3e0; color: #e65100; }
     .badge-verified { background: #e6f4ea; color: #1e7e34; }
     .badge-rejected { background: #fce8e6; color: #c62828; }
+    .badge-matched { background: #e8f0fe; color: #1a73e8; }
+    .badge-assigned { background: #e6f4ea; color: #1e7e34; }
+    .badge-unmatched { background: #f3e8fd; color: #6a1b9a; }
     button.action { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
     .btn-verify { background: #e6f4ea; color: #1e7e34; }
     .btn-reject { background: #fce8e6; color: #c62828; }
@@ -38,6 +41,19 @@
     .btn-send { background: #e8f0fe; color: #1a73e8; }
     select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; }
     .reply-cell { max-width: 200px; font-size: 12px; color: #555; white-space: pre-wrap; word-break: break-word; }
+    .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-bar input[type=text], .filter-bar input[type=search] {
+      padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; min-width: 220px;
+    }
+    .filter-bar input[type=date] { padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+    .filter-bar label { font-size: 13px; color: #555; }
+    .filter-bar button { padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .btn-apply { background: #1a73e8; color: #fff; }
+    .btn-clear { background: #f1f3f4; color: #444; }
+    .count-badge { font-size: 12px; color: #888; margin-left: 8px; }
+    .source-ig { color: #c13584; font-size: 12px; }
+    .source-im { color: #e65c00; font-size: 12px; }
+    .source-reddit { color: #ff4500; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -52,13 +68,15 @@
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('dealers')">Dealers</div>
+  <div class="tab" onclick="switchTab('total')">Total Leads</div>
   <div class="tab" onclick="switchTab('matched')">Matched Leads</div>
   <div class="tab" onclick="switchTab('unmatched')">Unmatched Leads</div>
   <div class="tab" onclick="switchTab('payments')">Payments</div>
   <div class="tab" onclick="switchTab('fetched')">Fetched Posts</div>
 </div>
 
-<div id="panel-dealers" class="panel active"><p>Loading...</p></div>
+<div id="panel-dealers" class="panel active"></div>
+<div id="panel-total" class="panel"></div>
 <div id="panel-matched" class="panel"></div>
 <div id="panel-unmatched" class="panel"></div>
 <div id="panel-payments" class="panel"></div>
@@ -66,72 +84,80 @@
 
 <script>
 let allDealers = [];
+let allLeadsRaw = [];
+let matchedRaw = [];
+let unmatchedRaw = [];
+
+const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched'];
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['dealers','matched','unmatched','payments','fetched'][i] === name);
-  });
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   if (name === 'dealers') loadDealers();
+  else if (name === 'total') loadAllLeads();
   else if (name === 'matched') loadMatched();
   else if (name === 'unmatched') loadUnmatched();
   else if (name === 'payments') loadPayments();
   else if (name === 'fetched') loadFetchedPosts();
 }
 
-async function runCleanup() {
-  if (!confirm('Delete seen_posts older than 30 days, fetched_posts older than 60 days, and unmatched leads older than 90 days?')) return;
-  const btn = document.getElementById('cleanupBtn');
-  const res = document.getElementById('crawlResult');
-  btn.disabled = true;
-  btn.textContent = 'Cleaning…';
-  res.textContent = '';
-  try {
-    const data = await fetch('/api/admin/cleanup', { method: 'POST' }).then(r => r.json());
-    if (data.error) {
-      res.textContent = 'Cleanup error: ' + data.error;
-    } else {
-      res.textContent = `Cleanup done — seen_posts: -${data.deleted_seen}, fetched_posts: -${data.deleted_fetched}, unmatched leads: -${data.deleted_unmatched}`;
-    }
-  } catch (e) {
-    res.textContent = 'Cleanup failed';
-  }
-  btn.disabled = false;
-  btn.textContent = 'Cleanup Old Data';
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function safeUrl(url) {
+  const s = String(url || '');
+  return /^https?:\/\//i.test(s) ? esc(s) : '#';
+}
+function fmtSource(subreddit) {
+  if (subreddit === 'instagram') return '<span class="source-ig">📷 Instagram</span>';
+  if (subreddit === 'indiamart') return '<span class="source-im">🏪 IndiaMART</span>';
+  return `<span class="source-reddit">r/${esc(subreddit)}</span>`;
+}
+function fmtStatus(status) {
+  const map = { matched: 'badge-matched', assigned: 'badge-assigned', unmatched: 'badge-unmatched' };
+  return `<span class="badge ${map[status]||''}">${esc(status)}</span>`;
+}
+function filterByDate(rows, fromId, toId, dateField = 'emailed_at') {
+  const from = document.getElementById(fromId)?.value;
+  const to = document.getElementById(toId)?.value;
+  return rows.filter(r => {
+    const d = (r[dateField] || '').slice(0, 10);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
 }
 
-async function triggerCrawl() {
-  const btn = document.getElementById('crawlBtn');
-  const res = document.getElementById('crawlResult');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  res.textContent = '';
-  try {
-    const data = await fetch('/api/crawl/trigger', { method: 'POST' }).then(r => r.json());
-    if (data.error) {
-      res.textContent = 'Error: ' + data.error;
-    } else {
-      res.textContent = `Done — ${data.fetched} fetched · ${data.filtered} filtered · ${data.leads} leads · ${data.emails} emails · ${data.unmatched} unmatched`;
-    }
-  } catch (e) {
-    res.textContent = 'Request failed';
-  }
-  btn.disabled = false;
-  btn.textContent = 'Run Crawl';
-  loadDealers();
-}
+// ── Dealers ───────────────────────────────────────────────────────────────────
 
 async function loadDealers() {
   allDealers = await fetch('/api/dealers').then(r => r.json());
   const panel = document.getElementById('panel-dealers');
-  if (!allDealers.length) { panel.innerHTML = '<p>No dealers registered yet.</p>'; return; }
-  panel.innerHTML = `<table>
+  panel.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" id="dealer-search" placeholder="Search by name or email…" oninput="renderDealers()">
+    </div>
+    <div id="dealer-table"></div>`;
+  renderDealers();
+}
+
+function renderDealers() {
+  const q = (document.getElementById('dealer-search')?.value || '').toLowerCase();
+  const rows = allDealers.filter(d =>
+    !q || d.name.toLowerCase().includes(q) || (d.emails||'').toLowerCase().includes(q)
+  );
+  const el = document.getElementById('dealer-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p>No dealers found.</p>'; return; }
+  el.innerHTML = `<table>
     <thead><tr>
       <th>Name</th><th>State</th><th>City</th><th>Category</th>
       <th>Leads Used</th><th>Subscription</th><th>Expires</th><th>Action</th>
     </tr></thead>
-    <tbody>${allDealers.map(d => `<tr>
+    <tbody>${rows.map(d => `<tr>
       <td><strong>${esc(d.name)}</strong><br><small>${esc(d.emails)}</small></td>
       <td>${esc(d.state||'')}</td>
       <td>${esc(d.city||'')}</td>
@@ -144,47 +170,143 @@ async function loadDealers() {
   </table>`;
 }
 
-async function loadMatched() {
-  const leads = await fetch('/api/leads').then(r => r.json());
-  const panel = document.getElementById('panel-matched');
-  if (!leads.length) { panel.innerHTML = '<p>No matched leads yet.</p>'; return; }
-  panel.innerHTML = `<table>
-    <thead><tr><th>Post</th><th>Subreddit</th><th>Location</th><th>What to Sell</th><th>Dealer</th><th>Suggested Reply</th><th>Date</th></tr></thead>
-    <tbody>${leads.map(l => `<tr>
-      <td><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
-      <td>r/${esc(l.subreddit)}</td>
-      <td>${esc(l.post_location||'—')}</td>
+// ── Total Leads ───────────────────────────────────────────────────────────────
+
+async function loadAllLeads() {
+  allLeadsRaw = await fetch('/api/leads/all').then(r => r.json());
+  const panel = document.getElementById('panel-total');
+  panel.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" id="total-search" placeholder="Search post, source, category…" oninput="renderAllLeads()">
+      <label>From <input type="date" id="total-from" onchange="renderAllLeads()"></label>
+      <label>To <input type="date" id="total-to" onchange="renderAllLeads()"></label>
+      <button class="btn-clear" onclick="clearFilter('total')">Clear</button>
+    </div>
+    <div id="total-table"></div>`;
+  renderAllLeads();
+}
+
+function renderAllLeads() {
+  const q = (document.getElementById('total-search')?.value || '').toLowerCase();
+  let rows = filterByDate(allLeadsRaw, 'total-from', 'total-to');
+  if (q) rows = rows.filter(r =>
+    (r.post_title||'').toLowerCase().includes(q) ||
+    (r.subreddit||'').toLowerCase().includes(q) ||
+    (r.lead_category||'').toLowerCase().includes(q) ||
+    (r.what_to_sell||'').toLowerCase().includes(q) ||
+    (r.dealer_name||'').toLowerCase().includes(q)
+  );
+  const el = document.getElementById('total-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p>No leads found.</p>'; return; }
+  el.innerHTML = `<p class="count-badge">${rows.length} lead${rows.length!==1?'s':''}</p>
+  <table>
+    <thead><tr><th>Post</th><th>Source</th><th>Category</th><th>What to Sell</th><th>Status</th><th>Dealer</th><th>Date</th></tr></thead>
+    <tbody>${rows.map(l => `<tr>
+      <td style="max-width:260px"><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,70)}</a></td>
+      <td>${fmtSource(l.subreddit)}</td>
+      <td>${esc(l.lead_category||'—')}</td>
       <td>${esc(l.what_to_sell||'—')}</td>
+      <td>${fmtStatus(l.status)}</td>
       <td>${esc(l.dealer_name||'—')}</td>
-      <td class="reply-cell">${esc(l.suggested_reply||'—').slice(0,120)}</td>
-      <td>${(l.emailed_at||'').slice(0,10)}</td>
+      <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
 
+// ── Matched Leads ─────────────────────────────────────────────────────────────
+
+async function loadMatched() {
+  matchedRaw = await fetch('/api/leads').then(r => r.json());
+  const panel = document.getElementById('panel-matched');
+  panel.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" id="matched-search" placeholder="Search post, dealer, category…" oninput="renderMatched()">
+      <label>From <input type="date" id="matched-from" onchange="renderMatched()"></label>
+      <label>To <input type="date" id="matched-to" onchange="renderMatched()"></label>
+      <button class="btn-clear" onclick="clearFilter('matched')">Clear</button>
+    </div>
+    <div id="matched-table"></div>`;
+  renderMatched();
+}
+
+function renderMatched() {
+  const q = (document.getElementById('matched-search')?.value || '').toLowerCase();
+  let rows = filterByDate(matchedRaw, 'matched-from', 'matched-to');
+  if (q) rows = rows.filter(r =>
+    (r.post_title||'').toLowerCase().includes(q) ||
+    (r.dealer_name||'').toLowerCase().includes(q) ||
+    (r.lead_category||'').toLowerCase().includes(q) ||
+    (r.subreddit||'').toLowerCase().includes(q)
+  );
+  const el = document.getElementById('matched-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p>No matched leads found.</p>'; return; }
+  el.innerHTML = `<p class="count-badge">${rows.length} lead${rows.length!==1?'s':''}</p>
+  <table>
+    <thead><tr><th>Post</th><th>Source</th><th>Location</th><th>What to Sell</th><th>Dealer</th><th>Suggested Reply</th><th>Date</th></tr></thead>
+    <tbody>${rows.map(l => `<tr>
+      <td style="max-width:220px"><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
+      <td>${fmtSource(l.subreddit)}</td>
+      <td>${esc(l.post_location||'—')}</td>
+      <td>${esc(l.what_to_sell||'—')}</td>
+      <td>${esc(l.dealer_name||'—')}</td>
+      <td class="reply-cell">${esc(l.suggested_reply||'—').slice(0,120)}</td>
+      <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ── Unmatched Leads ───────────────────────────────────────────────────────────
+
 async function loadUnmatched() {
-  const leads = await fetch('/api/leads/unmatched').then(r => r.json());
+  unmatchedRaw = await fetch('/api/leads/unmatched').then(r => r.json());
+  if (!allDealers.length) allDealers = await fetch('/api/dealers').then(r => r.json());
   const panel = document.getElementById('panel-unmatched');
-  if (!leads.length) { panel.innerHTML = '<p>No unmatched leads.</p>'; return; }
-  const dealerOpts = allDealers.length ? allDealers : await fetch('/api/dealers').then(r => r.json());
-  panel.innerHTML = `<table>
-    <thead><tr><th>Post</th><th>Subreddit</th><th>Location</th><th>What to Sell</th><th>Suggested Reply</th><th>Assign &amp; Send</th></tr></thead>
-    <tbody>${leads.map(l => `<tr>
-      <td><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
-      <td>r/${esc(l.subreddit)}</td>
+  panel.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" id="unmatched-search" placeholder="Search post, source, category…" oninput="renderUnmatched()">
+      <label>From <input type="date" id="unmatched-from" onchange="renderUnmatched()"></label>
+      <label>To <input type="date" id="unmatched-to" onchange="renderUnmatched()"></label>
+      <button class="btn-clear" onclick="clearFilter('unmatched')">Clear</button>
+    </div>
+    <div id="unmatched-table"></div>`;
+  renderUnmatched();
+}
+
+function renderUnmatched() {
+  const q = (document.getElementById('unmatched-search')?.value || '').toLowerCase();
+  let rows = filterByDate(unmatchedRaw, 'unmatched-from', 'unmatched-to');
+  if (q) rows = rows.filter(r =>
+    (r.post_title||'').toLowerCase().includes(q) ||
+    (r.subreddit||'').toLowerCase().includes(q) ||
+    (r.what_to_sell||'').toLowerCase().includes(q)
+  );
+  const el = document.getElementById('unmatched-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p>No unmatched leads found.</p>'; return; }
+  const dealerOpts = allDealers.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  el.innerHTML = `<p class="count-badge">${rows.length} lead${rows.length!==1?'s':''}</p>
+  <table>
+    <thead><tr><th>Post</th><th>Source</th><th>Location</th><th>What to Sell</th><th>Suggested Reply</th><th>Date</th><th>Assign &amp; Send</th></tr></thead>
+    <tbody>${rows.map(l => `<tr>
+      <td style="max-width:220px"><a href="${safeUrl(l.post_url)}" target="_blank">${esc(l.post_title||'(no title)').slice(0,60)}</a></td>
+      <td>${fmtSource(l.subreddit)}</td>
       <td>${esc(l.post_location||'—')}</td>
       <td>${esc(l.what_to_sell||'—')}</td>
       <td class="reply-cell">${esc(l.suggested_reply||'—').slice(0,120)}</td>
-      <td>
+      <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
+      <td style="white-space:nowrap">
         <select class="assign" id="assign-${l.id}">
-          <option value="">— Dealer —</option>
-          ${dealerOpts.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+          <option value="">— Dealer —</option>${dealerOpts}
         </select>
         <button class="action btn-send" onclick="assignLead(${l.id})">Send</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
+
+// ── Payments ──────────────────────────────────────────────────────────────────
 
 async function loadPayments() {
   const payments = await fetch('/api/payments').then(r => r.json());
@@ -206,29 +328,46 @@ async function loadPayments() {
   </table>`;
 }
 
+// ── Fetched Posts ─────────────────────────────────────────────────────────────
+
 async function loadFetchedPosts() {
   const posts = await fetch('/api/fetched-posts').then(r => r.json());
   const panel = document.getElementById('panel-fetched');
   if (!posts.length) { panel.innerHTML = '<p>No fetched posts yet. Click Run Crawl first.</p>'; return; }
-  const dealerOpts = allDealers.length ? allDealers : await fetch('/api/dealers').then(r => r.json());
+  if (!allDealers.length) allDealers = await fetch('/api/dealers').then(r => r.json());
+  const dealerOpts = allDealers.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
   panel.innerHTML = `<table>
     <thead><tr>
-      <th>Post</th><th>Subreddit</th><th>Preview</th><th>Fetched</th><th>Send to Dealer</th>
+      <th>Post</th><th>Source</th><th>Preview</th><th>Fetched</th><th>Send to Dealer</th>
     </tr></thead>
     <tbody>${posts.map(p => `<tr>
       <td style="max-width:220px"><a href="${safeUrl(p.post_url)}" target="_blank">${esc(p.post_title||'(no title)').slice(0,70)}</a></td>
-      <td>r/${esc(p.subreddit)}</td>
+      <td>${fmtSource(p.subreddit)}</td>
       <td style="max-width:200px;font-size:12px;color:#555">${esc(p.post_text||'').slice(0,100)}${p.post_text&&p.post_text.length>100?'…':''}</td>
       <td style="white-space:nowrap">${(p.fetched_at||'').slice(0,16).replace('T',' ')}</td>
       <td style="white-space:nowrap">
         <select class="assign" id="fp-dealer-${p.id}">
-          <option value="">— Dealer —</option>
-          ${dealerOpts.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+          <option value="">— Dealer —</option>${dealerOpts}
         </select>
         <button class="action btn-send" id="fp-btn-${p.id}" onclick="sendFetchedPost(${p.id})">Send</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+function clearFilter(prefix) {
+  const s = document.getElementById(prefix + '-search');
+  const f = document.getElementById(prefix + '-from');
+  const t = document.getElementById(prefix + '-to');
+  if (s) s.value = '';
+  if (f) f.value = '';
+  if (t) t.value = '';
+  if (prefix === 'total') renderAllLeads();
+  else if (prefix === 'matched') renderMatched();
+  else if (prefix === 'unmatched') renderUnmatched();
+  else if (prefix === 'dealer') renderDealers();
 }
 
 async function sendFetchedPost(postId) {
@@ -283,12 +422,46 @@ async function assignLead(leadId) {
   loadUnmatched();
 }
 
-function esc(str) {
-  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+async function runCleanup() {
+  if (!confirm('Delete seen_posts older than 30 days, fetched_posts older than 60 days, and unmatched leads older than 90 days?')) return;
+  const btn = document.getElementById('cleanupBtn');
+  const res = document.getElementById('crawlResult');
+  btn.disabled = true;
+  btn.textContent = 'Cleaning…';
+  res.textContent = '';
+  try {
+    const data = await fetch('/api/admin/cleanup', { method: 'POST' }).then(r => r.json());
+    if (data.error) {
+      res.textContent = 'Cleanup error: ' + data.error;
+    } else {
+      res.textContent = `Cleanup done — seen_posts: -${data.deleted_seen}, fetched_posts: -${data.deleted_fetched}, unmatched leads: -${data.deleted_unmatched}`;
+    }
+  } catch (e) {
+    res.textContent = 'Cleanup failed';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Cleanup Old Data';
 }
-function safeUrl(url) {
-  const s = String(url || '');
-  return /^https?:\/\//i.test(s) ? esc(s) : '#';
+
+async function triggerCrawl() {
+  const btn = document.getElementById('crawlBtn');
+  const res = document.getElementById('crawlResult');
+  btn.disabled = true;
+  btn.textContent = 'Running...';
+  res.textContent = '';
+  try {
+    const data = await fetch('/api/crawl/trigger', { method: 'POST' }).then(r => r.json());
+    if (data.error) {
+      res.textContent = 'Error: ' + data.error;
+    } else {
+      res.textContent = `Done — ${data.fetched} fetched · ${data.filtered} filtered · ${data.leads} leads · ${data.emails} emails · ${data.unmatched} unmatched`;
+    }
+  } catch (e) {
+    res.textContent = 'Request failed';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Run Crawl';
+  loadDealers();
 }
 
 loadDealers();

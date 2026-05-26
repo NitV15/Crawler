@@ -191,6 +191,15 @@ function getUnmatchedLeads(db) {
   return db.prepare(`SELECT * FROM leads WHERE status = 'unmatched' ORDER BY id DESC`).all();
 }
 
+function getAllLeads(db) {
+  return db.prepare(`
+    SELECT l.*, d.name as dealer_name
+    FROM leads l
+    LEFT JOIN dealers d ON l.dealer_id = d.id
+    ORDER BY l.id DESC LIMIT 500
+  `).all();
+}
+
 function assignLead(db, leadId, dealerId) {
   db.prepare(`UPDATE leads SET dealer_id = ?, status = 'assigned' WHERE id = ?`).run(dealerId, leadId);
 }
@@ -234,7 +243,7 @@ function rejectPayment(db, paymentId) {
 module.exports = {
   openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
-  isSeenPost, markPostSeen, saveLead, getLeads, getUnmatchedLeads, assignLead,
+  isSeenPost, markPostSeen, saveLead, getLeads, getUnmatchedLeads, getAllLeads, assignLead,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   saveFetchedPost, getFetchedPosts,
 };

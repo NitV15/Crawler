@@ -48,32 +48,57 @@ async function fetchInstagramLeads(dealers, maxLeads = 80) {
     ]);
 
     const lines = [];
+    let buffer = '';
     let stderr = '';
+    let resolved = false;
 
-    child.stdout.on('data', chunk => {
-      chunk.toString().split('\n').filter(Boolean).forEach(l => lines.push(l));
-    });
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    const finish = (posts) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      resolve(posts);
+    };
 
-    child.on('close', code => {
-      if (code !== 0) {
-        console.error(`[instagram] Script exited ${code}: ${stderr.slice(0, 300)}`);
-        return resolve([]);
-      }
+    const timer = setTimeout(() => {
+      console.error('[instagram] Timeout — killing script');
+      child.kill();
+      finish(parseLines(lines));
+    }, 5 * 60 * 1000);
+
+    function parseLines(rawLines) {
       const posts = [];
-      for (const line of lines) {
+      for (const line of rawLines) {
         try {
           const post = JSON.parse(line);
           if (post.id && post._subreddit === 'instagram') posts.push(post);
         } catch { /* skip malformed lines */ }
       }
+      return posts;
+    }
+
+    child.stdout.on('data', chunk => {
+      buffer += chunk.toString();
+      const parts = buffer.split('\n');
+      buffer = parts.pop();
+      parts.filter(Boolean).forEach(l => lines.push(l));
+    });
+
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+
+    child.on('close', code => {
+      if (buffer.trim()) lines.push(buffer.trim());
+      if (code !== 0) {
+        console.error(`[instagram] Script exited ${code}: ${stderr.slice(0, 300)}`);
+        return finish([]);
+      }
+      const posts = parseLines(lines);
       console.log(`[instagram] Total collected: ${posts.length}`);
-      resolve(posts);
+      finish(posts);
     });
 
     child.on('error', err => {
       console.error(`[instagram] Spawn error: ${err.message}`);
-      resolve([]);
+      finish([]);
     });
   });
 }

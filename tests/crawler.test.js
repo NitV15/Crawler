@@ -4,10 +4,12 @@ jest.mock('../dealer-matcher');
 jest.mock('../mailer');
 jest.mock('../prefilter');
 jest.mock('../subreddits');
+jest.mock('../instagram-fetcher');
 
 const { runCrawl, checkSubscription } = require('../crawler');
 const db = require('../db');
 const { identifyLead } = require('../matcher');
+const { fetchInstagramLeads } = require('../instagram-fetcher');
 const { matchDealers } = require('../dealer-matcher');
 const { sendLeadEmail } = require('../mailer');
 const { shouldCheckPost } = require('../prefilter');
@@ -41,6 +43,7 @@ beforeEach(() => {
   shouldCheckPost.mockReturnValue(true);
   buildSubredditList.mockReturnValue(['india']);
   identifyLead.mockResolvedValue({ is_lead: false, is_hiring_post: false });
+  fetchInstagramLeads.mockResolvedValue([]);
   matchDealers.mockResolvedValue([]);
 });
 
@@ -154,5 +157,17 @@ describe('runCrawl', () => {
     mockFetch([]);
     const result = await runCrawl(fakeDb);
     expect(result).toEqual(expect.objectContaining({ fetched: 0, filtered: 0, leads: 0, emails: 0, unmatched: 0 }));
+  });
+
+  test('passes source=instagram to identifyLead for Instagram posts', async () => {
+    const igPost = {
+      id: 'ig_001', title: '', selftext: 'Just moved to Delhi!',
+      permalink: 'https://www.instagram.com/p/abc/', _subreddit: 'instagram',
+    };
+    fetchInstagramLeads.mockResolvedValue([igPost]);
+    mockFetch([]);
+    identifyLead.mockResolvedValue({ is_lead: false, is_hiring_post: false });
+    await runCrawl(fakeDb);
+    expect(identifyLead).toHaveBeenCalledWith(expect.objectContaining({ source: 'instagram' }));
   });
 });

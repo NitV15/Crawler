@@ -8,6 +8,7 @@ const { identifyLead } = require('./matcher');
 const { matchDealers } = require('./dealer-matcher');
 const { sendLeadEmail } = require('./mailer');
 const { fetchIndiaMartLeads } = require('./indiamart-fetcher');
+const { fetchInstagramLeads } = require('./instagram-fetcher');
 
 const POST_LIMIT = 25;
 const TARGET_POSTS = 150;
@@ -55,15 +56,19 @@ async function runCrawl(db) {
     return { fetched: 0, filtered: 0, leads: 0, emails: 0, unmatched: 0 };
   }
 
-  const [redditPosts, indiamartPosts] = await Promise.all([
+  const [redditPosts, indiamartPosts, instagramPosts] = await Promise.all([
     collectPosts(dealers),
     fetchIndiaMartLeads(dealers).catch(err => {
       console.error(`[crawler] IndiaMART fetch failed: ${err.message}`);
       return [];
     }),
+    fetchInstagramLeads(dealers).catch(err => {
+      console.error(`[crawler] Instagram fetch failed: ${err.message}`);
+      return [];
+    }),
   ]);
-  const allPosts = [...redditPosts, ...indiamartPosts];
-  console.log(`[crawler] Fetched ${redditPosts.length} Reddit + ${indiamartPosts.length} IndiaMART posts`);
+  const allPosts = [...redditPosts, ...indiamartPosts, ...instagramPosts];
+  console.log(`[crawler] Fetched ${redditPosts.length} Reddit + ${indiamartPosts.length} IndiaMART + ${instagramPosts.length} Instagram posts`);
 
   // Save all fetched posts to DB so admin can view and manually send them
   allPosts.forEach(p => saveFetchedPost(resolvedDb, {
@@ -99,8 +104,12 @@ async function runCrawl(db) {
       : `https://reddit.com${post.permalink}`;
 
     try {
-      console.log(`[crawler] Gemini checking: "${postTitle.slice(0, 60)}" (r/${subreddit})`);
-      const lead = await identifyLead({ postTitle, postText, subreddit });
+      const source = post._subreddit === 'instagram' ? 'instagram'
+        : post._subreddit === 'indiamart' ? 'indiamart'
+        : 'reddit';
+
+      console.log(`[crawler] Gemini checking: "${postTitle.slice(0, 60)}" (${source}/${subreddit})`);
+      const lead = await identifyLead({ postTitle, postText, subreddit, source });
       if (lead.is_hiring_post) { console.log(`[crawler]   → hiring post, skipped`); continue; }
       if (!lead.is_lead) { console.log(`[crawler]   → not a lead`); continue; }
       console.log(`[crawler]   → LEAD: ${lead.lead_category} | "${lead.what_to_sell}" | loc: ${lead.post_location || 'none'}`);

@@ -6,98 +6,134 @@ import random
 import sys
 import time
 
-from instagrapi import Client
+import requests
 
-SESSION_FILE = os.path.join(os.path.dirname(__file__), 'instagram_session.json')
+SESSION_ID = os.environ.get('INSTAGRAM_SESSION_ID', '')
+CSRF_TOKEN = os.environ.get('INSTAGRAM_CSRF_TOKEN', '')
+WWW_CLAIM = os.environ.get('INSTAGRAM_WWW_CLAIM', '')
+DS_USER_ID = os.environ.get('INSTAGRAM_DS_USER_ID', '')
 
-
-def get_client():
-    cl = Client()
-    username = os.environ.get('INSTAGRAM_USERNAME', '')
-    password = os.environ.get('INSTAGRAM_PASSWORD', '')
-    if not username or not password:
-        raise RuntimeError('INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD must be set in .env')
-
-    if os.path.exists(SESSION_FILE):
-        try:
-            cl.load_settings(SESSION_FILE)
-            cl.login(username, password)
-            return cl
-        except Exception as e:
-            print(f'[instagram] Session reload failed, re-logging in: {e}', file=sys.stderr)
-
-    cl = Client()
-    cl.login(username, password)
-    cl.dump_settings(SESSION_FILE)
-    print('[instagram] Login successful, session saved', file=sys.stderr)
-    return cl
+APP_ID = '936619743392459'
 
 
-def media_to_post(media):
-    caption = (media.caption_text or '')[:500]
-    return {
-        'id': f'ig_{media.pk}',
-        'title': '',
-        'selftext': caption,
-        'permalink': f'https://www.instagram.com/p/{media.code}/',
-        '_subreddit': 'instagram',
-    }
+def make_session():
+    s = requests.Session()
+    s.cookies.set('sessionid', SESSION_ID)
+    s.cookies.set('csrftoken', CSRF_TOKEN)
+    if DS_USER_ID:
+        s.cookies.set('ds_user_id', DS_USER_ID)
+    s.headers.update({
+        'x-csrftoken': CSRF_TOKEN,
+        'x-ig-app-id': APP_ID,
+        'x-ig-www-claim': WWW_CLAIM,
+        'x-requested-with': 'XMLHttpRequest',
+        'referer': 'https://www.instagram.com/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+    })
+    return s
+
+
+def fetch_hashtag(session, tag, amount=5):
+    url = f'https://www.instagram.com/api/v1/tags/{tag}/sections/'
+    data = {'tab': 'recent', 'page': 1, 'next_media_ids': '[]', 'next_page': 1}
+    try:
+        resp = session.post(url, data=data, timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f'HTTP {resp.status_code}')
+        body = resp.json()
+        medias = []
+        for section in body.get('sections', []):
+            for item in section.get('layout_content', {}).get('medias', []):
+                media = item.get('media', {})
+                pk = media.get('pk')
+                code = media.get('code')
+                caption_obj = media.get('caption') or {}
+                caption = caption_obj.get('text', '') if isinstance(caption_obj, dict) else ''
+                if pk and code and caption:
+                    medias.append({'pk': str(pk), 'code': code, 'caption': caption[:500]})
+                if len(medias) >= amount:
+                    break
+            if len(medias) >= amount:
+                break
+        return medias
+    except Exception as e:
+        raise RuntimeError(str(e))
 
 
 def delay():
-    time.sleep(random.uniform(5, 10))
+    time.sleep(random.uniform(3, 7))
 
 
 def main():
+    if not SESSION_ID or not CSRF_TOKEN or not WWW_CLAIM:
+        print('[instagram] Missing env vars: INSTAGRAM_SESSION_ID, INSTAGRAM_CSRF_TOKEN, INSTAGRAM_WWW_CLAIM', file=sys.stderr)
+        sys.exit(1)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--keywords', default='')
     parser.add_argument('--hashtags', default='')
     parser.add_argument('--max', type=int, default=80)
     args = parser.parse_args()
 
-    try:
-        cl = get_client()
-    except Exception as e:
-        print(f'[instagram] Login failed: {e}', file=sys.stderr)
-        sys.exit(1)
+    session = make_session()
+    print('[instagram] Using web API with session cookie', file=sys.stderr)
 
     seen = set()
     results = []
 
-    # Caption keyword search (indirect leads)
-    if args.keywords:
-        keywords = [k.strip() for k in args.keywords.split(',') if k.strip()]
-        for kw in keywords[:20]:
-            if len(results) >= args.max:
-                break
-            try:
-                medias = cl.search_posts(kw, count=5)
-                added = 0
-                for m in medias:
-                    uid = str(m.pk)
-                    if uid not in seen and m.caption_text:
-                        seen.add(uid)
-                        results.append(media_to_post(m))
-                        added += 1
-                print(f'[instagram] keyword "{kw}": {added} added', file=sys.stderr)
-            except Exception as e:
-                print(f'[instagram] keyword "{kw}" error: {e}', file=sys.stderr)
-            delay()
+    LIFE_EVENT_HASHTAGS = [
+        'justmoved', 'relocated', 'newcity', 'shifting',
+        'tripplanning', 'wanderlust', 'vacationplanning', 'bookedtrip',
+        'newcar', 'firstcar', 'drivinglicense', 'newdriver',
+        'househunting', 'newflat', 'rentingapartment', 'movingday',
+        'gettingmarried', 'engaged', 'weddingplanning', 'shaadi',
+        'newjob', 'joiningwork', 'relocation', 'officemove',
+        'gymmotivation', 'weightlossjourney', 'fitnessmotivation',
+        'pregnancyannouncement', 'newborn', 'babyshower',
+    ]
 
-    # Hashtag search (direct leads)
+    for tag in LIFE_EVENT_HASHTAGS:
+        if len(results) >= args.max:
+            break
+        try:
+            medias = fetch_hashtag(session, tag, amount=3)
+            added = 0
+            for m in medias:
+                uid = m['pk']
+                if uid not in seen:
+                    seen.add(uid)
+                    results.append({
+                        'id': f'ig_{uid}',
+                        'title': '',
+                        'selftext': m['caption'],
+                        'permalink': f'https://www.instagram.com/p/{m["code"]}/',
+                        '_subreddit': 'instagram',
+                    })
+                    added += 1
+            print(f'[instagram] life-event #{tag}: {added} added', file=sys.stderr)
+        except Exception as e:
+            print(f'[instagram] life-event #{tag} error: {e}', file=sys.stderr)
+        delay()
+
     if args.hashtags:
         hashtags = [h.strip().lstrip('#') for h in args.hashtags.split(',') if h.strip()]
         for tag in hashtags[:15]:
             if len(results) >= args.max:
                 break
             try:
-                medias = cl.hashtag_medias_recent(tag, amount=5)
+                medias = fetch_hashtag(session, tag, amount=5)
                 added = 0
                 for m in medias:
-                    uid = str(m.pk)
-                    if uid not in seen and m.caption_text:
+                    uid = m['pk']
+                    if uid not in seen:
                         seen.add(uid)
-                        results.append(media_to_post(m))
+                        results.append({
+                            'id': f'ig_{uid}',
+                            'title': '',
+                            'selftext': m['caption'],
+                            'permalink': f'https://www.instagram.com/p/{m["code"]}/',
+                            '_subreddit': 'instagram',
+                        })
                         added += 1
                 print(f'[instagram] hashtag #{tag}: {added} added', file=sys.stderr)
             except Exception as e:

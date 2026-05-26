@@ -47,3 +47,88 @@ describe('buildDealerHashtags', () => {
     expect(tags).toContain('villa');
   });
 });
+
+jest.mock('child_process', () => ({ spawn: jest.fn() }));
+const { spawn } = require('child_process');
+const { EventEmitter } = require('events');
+
+function makeChild(stdoutLines = [], exitCode = 0) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  spawn.mockReturnValueOnce(child);
+  setImmediate(() => {
+    stdoutLines.forEach(l => child.stdout.emit('data', l + '\n'));
+    child.emit('close', exitCode);
+  });
+}
+
+describe('fetchInstagramLeads', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('returns empty array when script exits with error code', async () => {
+    makeChild([], 1);
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    const result = await fetchInstagramLeads([]);
+    expect(result).toEqual([]);
+  });
+
+  test('returns empty array on spawn error', async () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    spawn.mockReturnValueOnce(child);
+    // Don't emit error in setImmediate - the function should handle it
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    const promise = fetchInstagramLeads([]);
+    // Now emit the error
+    setImmediate(() => child.emit('error', new Error('python3 not found')));
+    const result = await promise;
+    expect(result).toEqual([]);
+  });
+
+  test('parses valid JSON lines and returns normalized posts', async () => {
+    const post = {
+      id: 'ig_123', title: '', selftext: 'Just moved to Bangalore!',
+      permalink: 'https://www.instagram.com/p/abc/', _subreddit: 'instagram',
+    };
+    makeChild([JSON.stringify(post)]);
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    const result = await fetchInstagramLeads([]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(post);
+  });
+
+  test('skips malformed JSON lines', async () => {
+    const post = {
+      id: 'ig_456', title: '', selftext: 'Planning a trip!',
+      permalink: 'https://www.instagram.com/p/xyz/', _subreddit: 'instagram',
+    };
+    makeChild(['not-json', JSON.stringify(post), '{broken']);
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    const result = await fetchInstagramLeads([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('ig_456');
+  });
+
+  test('skips posts without _subreddit instagram', async () => {
+    const badPost = { id: 'xx_1', title: 'test', selftext: 'text', permalink: 'http://x', _subreddit: 'reddit' };
+    const goodPost = { id: 'ig_2', title: '', selftext: 'text', permalink: 'http://y', _subreddit: 'instagram' };
+    makeChild([JSON.stringify(badPost), JSON.stringify(goodPost)]);
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    const result = await fetchInstagramLeads([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('ig_2');
+  });
+
+  test('passes --keywords and --hashtags and --max args to python', async () => {
+    makeChild([]);
+    const { fetchInstagramLeads } = require('../instagram-fetcher');
+    await fetchInstagramLeads([{ industry_category: 'Travel', keywords: '' }]);
+    expect(spawn).toHaveBeenCalledWith('python3', expect.arrayContaining([
+      '--keywords', expect.any(String),
+      '--hashtags', expect.stringContaining('travel'),
+      '--max', '80',
+    ]));
+  });
+});

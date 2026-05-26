@@ -35,8 +35,47 @@ function buildDealerHashtags(dealers) {
 }
 
 async function fetchInstagramLeads(dealers, maxLeads = 80) {
-  // placeholder — implemented in Task 2
-  return [];
+  const keywords = LIFE_EVENT_KEYWORDS.join(',');
+  const hashtags = buildDealerHashtags(dealers).slice(0, 15).join(',');
+
+  return new Promise((resolve) => {
+    const scriptPath = path.join(__dirname, 'instagram_scraper.py');
+    const child = spawn('python3', [
+      scriptPath,
+      '--keywords', keywords,
+      '--hashtags', hashtags,
+      '--max', String(maxLeads),
+    ]);
+
+    const lines = [];
+    let stderr = '';
+
+    child.stdout.on('data', chunk => {
+      chunk.toString().split('\n').filter(Boolean).forEach(l => lines.push(l));
+    });
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+
+    child.on('close', code => {
+      if (code !== 0) {
+        console.error(`[instagram] Script exited ${code}: ${stderr.slice(0, 300)}`);
+        return resolve([]);
+      }
+      const posts = [];
+      for (const line of lines) {
+        try {
+          const post = JSON.parse(line);
+          if (post.id && post._subreddit === 'instagram') posts.push(post);
+        } catch { /* skip malformed lines */ }
+      }
+      console.log(`[instagram] Total collected: ${posts.length}`);
+      resolve(posts);
+    });
+
+    child.on('error', err => {
+      console.error(`[instagram] Spawn error: ${err.message}`);
+      resolve([]);
+    });
+  });
 }
 
 module.exports = { fetchInstagramLeads, buildDealerHashtags, LIFE_EVENT_KEYWORDS };

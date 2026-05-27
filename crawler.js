@@ -36,8 +36,8 @@ function checkSubscription(dealer) {
     if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
     return 'expired';
   }
-  if (lead_count < 2) return 'send';
-  if (lead_count === 2) return 'send_with_footer';
+  if (lead_count < 1) return 'send';
+  if (lead_count === 1) return 'send_with_footer';
   return 'skip';
 }
 

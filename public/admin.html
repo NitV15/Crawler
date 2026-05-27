@@ -9,8 +9,12 @@
     body { font-family: sans-serif; margin: 0; background: #f5f5f5; }
     header { background: #1a73e8; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
     header h1 { margin: 0; font-size: 20px; }
-    #crawlBtn { padding: 8px 20px; background: #fff; color: #1a73e8; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
-    #crawlBtn:disabled { background: #ccc; color: #666; cursor: not-allowed; }
+    #startBtn { padding: 8px 18px; background: #fff; color: #1a73e8; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+    #startBtn:disabled { background: #ccc; color: #666; cursor: not-allowed; }
+    #stopBtn { padding: 8px 18px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.6); border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; margin-left: 8px; }
+    #stopBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #crawlerStatus { font-size: 13px; margin-left: 12px; color: #e8f0fe; }
+    #crawlerStats { font-size: 12px; color: #b3d1ff; margin-left: 12px; }
     #cleanupBtn { padding: 8px 16px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 13px; cursor: pointer; margin-left: 10px; }
     #cleanupBtn:hover { background: rgba(255,255,255,0.25); }
     #cleanupBtn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -59,10 +63,12 @@
 <body>
 <header>
   <h1>Crawler Admin</h1>
-  <div style="display:flex;align-items:center">
-    <button id="crawlBtn" onclick="triggerCrawl()">Run Crawl</button>
-    <button id="cleanupBtn" onclick="runCleanup()">Cleanup Old Data</button>
-    <span id="crawlResult"></span>
+  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">
+    <button id="startBtn" onclick="startCrawler()">▶ Start Crawler</button>
+    <button id="stopBtn" onclick="stopCrawler()" disabled>■ Stop</button>
+    <span id="crawlerStatus">⚫ Stopped</span>
+    <span id="crawlerStats"></span>
+    <button id="cleanupBtn" onclick="runCleanup()" style="margin-left:16px">Cleanup Old Data</button>
   </div>
 </header>
 
@@ -425,44 +431,54 @@ async function assignLead(leadId) {
 async function runCleanup() {
   if (!confirm('Delete seen_posts older than 30 days, fetched_posts older than 60 days, and unmatched leads older than 90 days?')) return;
   const btn = document.getElementById('cleanupBtn');
-  const res = document.getElementById('crawlResult');
   btn.disabled = true;
   btn.textContent = 'Cleaning…';
-  res.textContent = '';
   try {
     const data = await fetch('/api/admin/cleanup', { method: 'POST' }).then(r => r.json());
-    if (data.error) {
-      res.textContent = 'Cleanup error: ' + data.error;
+    if (!data.error) {
+      alert(`Cleanup done — seen_posts: -${data.deleted_seen}, fetched_posts: -${data.deleted_fetched}, unmatched leads: -${data.deleted_unmatched}`);
     } else {
-      res.textContent = `Cleanup done — seen_posts: -${data.deleted_seen}, fetched_posts: -${data.deleted_fetched}, unmatched leads: -${data.deleted_unmatched}`;
+      alert('Cleanup error: ' + data.error);
     }
   } catch (e) {
-    res.textContent = 'Cleanup failed';
+    alert('Cleanup failed');
   }
   btn.disabled = false;
   btn.textContent = 'Cleanup Old Data';
 }
 
-async function triggerCrawl() {
-  const btn = document.getElementById('crawlBtn');
-  const res = document.getElementById('crawlResult');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  res.textContent = '';
-  try {
-    const data = await fetch('/api/crawl/trigger', { method: 'POST' }).then(r => r.json());
-    if (data.error) {
-      res.textContent = 'Error: ' + data.error;
-    } else {
-      res.textContent = `Done — ${data.fetched} fetched · ${data.filtered} filtered · ${data.leads} leads · ${data.emails} emails · ${data.unmatched} unmatched`;
-    }
-  } catch (e) {
-    res.textContent = 'Request failed';
-  }
-  btn.disabled = false;
-  btn.textContent = 'Run Crawl';
-  loadDealers();
+async function startCrawler() {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  await fetch('/api/crawl/start', { method: 'POST' });
+  pollStatus();
 }
+
+async function stopCrawler() {
+  document.getElementById('stopBtn').disabled = true;
+  await fetch('/api/crawl/stop', { method: 'POST' });
+}
+
+let statusPollTimer = null;
+async function pollStatus() {
+  clearTimeout(statusPollTimer);
+  try {
+    const res = await fetch('/api/crawl/status');
+    const s = await res.json();
+    const dot = s.running ? '🟢' : '⚫';
+    document.getElementById('crawlerStatus').textContent = `${dot} ${s.running ? 'Running' : 'Stopped'}`;
+    document.getElementById('crawlerStats').textContent = s.running
+      ? `Posts: ${s.postsCollected} | Leads: ${s.leadsFound} | Emails: ${s.emailsSent} | ${s.currentSource || '—'}`
+      : (s.lastBatchAt ? `Last run: Posts ${s.postsCollected} | Leads ${s.leadsFound} | Emails ${s.emailsSent}` : '');
+    document.getElementById('startBtn').disabled = s.running;
+    document.getElementById('stopBtn').disabled = !s.running;
+    if (s.running) statusPollTimer = setTimeout(pollStatus, 5000);
+  } catch (e) {
+    statusPollTimer = setTimeout(pollStatus, 10000);
+  }
+}
+
+pollStatus();
 
 loadDealers();
 </script>

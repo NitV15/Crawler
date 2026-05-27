@@ -127,7 +127,7 @@ function createApp(db) {
 
   app.post('/api/admin/cleanup', (req, res) => {
     try {
-      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-2 days')`).run();
+      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-5 days')`).run();
       const r2 = db.prepare(`DELETE FROM fetched_posts WHERE fetched_at < datetime('now', '-60 days')`).run();
       const r3 = db.prepare(`DELETE FROM leads WHERE status = 'unmatched' AND emailed_at < datetime('now', '-90 days')`).run();
       db.prepare('VACUUM').run();

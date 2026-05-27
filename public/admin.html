@@ -19,6 +19,8 @@
     #cleanupBtn:hover { background: rgba(255,255,255,0.25); }
     #cleanupBtn:disabled { opacity: 0.5; cursor: not-allowed; }
     #crawlResult { font-size: 13px; margin-left: 12px; color: #e8f0fe; }
+    #startJobsBtn { padding: 8px 18px; background: #fff; color: #1a73e8; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+    #startJobsBtn:disabled { background: #ccc; color: #666; cursor: not-allowed; }
     .tabs { display: flex; background: #fff; border-bottom: 2px solid #ddd; padding: 0 24px; overflow-x: auto; }
     .tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #555; white-space: nowrap; }
     .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
@@ -112,6 +114,12 @@
     <span id="crawlerStatus">⚫ Stopped</span>
     <span id="crawlerStats"></span>
     <button id="cleanupBtn" onclick="runCleanup()" style="margin-left:16px">Cleanup Old Data</button>
+    <span style="margin-left:16px;border-left:1px solid rgba(255,255,255,0.3);padding-left:16px">
+      <button id="startJobsBtn" onclick="startJobsCrawler()">▶ Start Jobs</button>
+      <button id="stopJobsBtn" onclick="stopJobsCrawler()" disabled style="padding:8px 18px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:4px;font-size:14px;font-weight:bold;cursor:pointer;margin-left:8px">■ Stop Jobs</button>
+      <span id="jobsStatus" style="font-size:13px;margin-left:12px;color:#e8f0fe">⚫ Stopped</span>
+      <span id="jobsStats" style="font-size:12px;color:#b3d1ff;margin-left:12px"></span>
+    </span>
   </div>
 </header>
 
@@ -123,6 +131,9 @@
   <div class="tab" onclick="switchTab('payments')">Payments</div>
   <div class="tab" onclick="switchTab('fetched')">Fetched Posts</div>
   <div class="tab" onclick="switchTab('logs')">Logs</div>
+  <div class="tab" onclick="switchTab('candidates')">Candidates</div>
+  <div class="tab" onclick="switchTab('job-matches')">Job Matches</div>
+  <div class="tab" onclick="switchTab('cand-payments')">Candidate Payments</div>
 </div>
 
 <div id="panel-dealers" class="panel active"></div>
@@ -132,6 +143,9 @@
 <div id="panel-payments" class="panel"></div>
 <div id="panel-fetched" class="panel"></div>
 <div id="panel-logs" class="panel"></div>
+<div id="panel-candidates" class="panel"></div>
+<div id="panel-job-matches" class="panel"></div>
+<div id="panel-cand-payments" class="panel"></div>
 
 <script>
 let allDealers = [];
@@ -139,7 +153,7 @@ let allLeadsRaw = [];
 let matchedRaw = [];
 let unmatchedRaw = [];
 
-const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched','logs'];
+const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched','logs','candidates','job-matches','cand-payments'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'dealers';
@@ -154,6 +168,9 @@ function switchTab(name) {
   else if (name === 'payments') loadPayments();
   else if (name === 'fetched') loadFetchedPosts();
   else if (name === 'logs') initLogs();
+  else if (name === 'candidates') loadCandidates();
+  else if (name === 'job-matches') loadJobMatches();
+  else if (name === 'cand-payments') loadCandidatePayments();
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -606,8 +623,160 @@ async function pollStatus() {
   }
 }
 
-pollStatus();
+// ── Jobs Crawler Controls ────────────────────────────────────────────────────
 
+let jobsStatusPollTimer = null;
+
+async function startJobsCrawler() {
+  await fetch('/api/jobs/start', { method: 'POST' });
+  pollJobsStatus();
+}
+
+async function stopJobsCrawler() {
+  await fetch('/api/jobs/stop', { method: 'POST' });
+  pollJobsStatus();
+}
+
+async function pollJobsStatus() {
+  clearTimeout(jobsStatusPollTimer);
+  try {
+    const res = await fetch('/api/jobs/status');
+    const s = await res.json();
+    const dot = s.running ? '🟢' : '⚫';
+    document.getElementById('jobsStatus').textContent = `${dot} ${s.running ? 'Running' : 'Stopped'}`;
+    document.getElementById('jobsStats').textContent = s.running
+      ? `Jobs: ${s.jobsCollected} | Matches: ${s.matchesFound} | ${s.currentCandidate || '—'}`
+      : (s.lastBatchAt ? `Last run: Jobs ${s.jobsCollected} | Matches ${s.matchesFound}` : '');
+    document.getElementById('startJobsBtn').disabled = s.running;
+    document.getElementById('stopJobsBtn').disabled = !s.running;
+    if (s.running) jobsStatusPollTimer = setTimeout(pollJobsStatus, 5000);
+  } catch (e) {
+    jobsStatusPollTimer = setTimeout(pollJobsStatus, 10000);
+  }
+}
+
+// ── Candidates Tab ────────────────────────────────────────────────────────────
+
+let allCandidates = [];
+
+async function loadCandidates() {
+  allCandidates = await fetch('/api/candidates').then(r => r.json());
+  const panel = document.getElementById('panel-candidates');
+  panel.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" id="cand-search" placeholder="Search by name, role or email…" oninput="renderCandidates()">
+    </div>
+    <div id="cand-table"></div>`;
+  renderCandidates();
+}
+
+function renderCandidates() {
+  const q = (document.getElementById('cand-search')?.value || '').toLowerCase();
+  const rows = allCandidates.filter(c =>
+    !q || c.name.toLowerCase().includes(q) ||
+    (c.role||'').toLowerCase().includes(q) ||
+    (c.emails||'').toLowerCase().includes(q)
+  );
+  const el = document.getElementById('cand-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<p>No candidates found.</p>'; return; }
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>Name</th><th>Role</th><th>Skills</th><th>City</th>
+      <th>Alerts Used</th><th>Subscription</th><th>Expires</th><th>Action</th>
+    </tr></thead>
+    <tbody>${rows.map(c => `<tr>
+      <td><strong>${esc(c.name)}</strong><br><small>${esc(c.emails)}</small></td>
+      <td>${esc(c.role||'')}</td>
+      <td><small>${esc(c.skills||'')}</small></td>
+      <td>${esc(c.city||'')}${c.state ? ', '+esc(c.state) : ''}</td>
+      <td>${c.subscription_status==='active' ? c.lead_count+'/∞' : c.lead_count+'/2'}</td>
+      <td><span class="badge badge-${c.subscription_status==='active'?'active':'free'}">${c.subscription_status==='active'?'Active':'Free'}</span></td>
+      <td>${c.subscription_expires_at ? c.subscription_expires_at.slice(0,10) : '—'}</td>
+      <td>
+        ${c.subscription_status==='active'
+          ? `<button class="action btn-sub-stop" onclick="candidateResetSub(${c.id})">Stop Sub</button>`
+          : `<button class="action btn-sub-start" onclick="candidateActivateSub(${c.id})">Activate Sub</button>`}
+        <button class="action ${c.active?'btn-toggle-on':'btn-toggle-off'}" onclick="toggleCandidate(${c.id},${c.active?0:1})">${c.active?'Disable':'Enable'}</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function toggleCandidate(id, active) {
+  await fetch(`/api/candidates/${id}/toggle`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
+  loadCandidates();
+}
+
+async function candidateActivateSub(id) {
+  if (!confirm('Activate subscription for this candidate? Sets 30-day active period and resets alert count to 0.')) return;
+  await fetch(`/api/candidates/${id}/activate-subscription`, { method: 'POST' });
+  loadCandidates();
+}
+
+async function candidateResetSub(id) {
+  if (!confirm('Stop subscription for this candidate? Resets them to free tier.')) return;
+  await fetch(`/api/candidates/${id}/reset-subscription`, { method: 'POST' });
+  loadCandidates();
+}
+
+// ── Job Matches Tab ────────────────────────────────────────────────────────────
+
+async function loadJobMatches() {
+  const matches = await fetch('/api/job-matches').then(r => r.json());
+  const panel = document.getElementById('panel-job-matches');
+  if (!matches.length) { panel.innerHTML = '<p>No job matches yet.</p>'; return; }
+  panel.innerHTML = `<p class="count-badge">${matches.length} match${matches.length!==1?'es':''}</p>
+  <table>
+    <thead><tr><th>Candidate</th><th>Job Title</th><th>Company</th><th>Location</th><th>Tip</th><th>Date</th></tr></thead>
+    <tbody>${matches.map(m => `<tr>
+      <td><strong>${esc(m.candidate_name||'—')}</strong></td>
+      <td><a href="${safeUrl(m.job_url)}" target="_blank">${esc(m.job_title||'—')}</a></td>
+      <td>${esc(m.company||'—')}</td>
+      <td>${esc(m.location||'—')}</td>
+      <td class="reply-cell">${esc(m.suggested_tip||'—').slice(0,100)}</td>
+      <td style="white-space:nowrap">${(m.emailed_at||'').slice(0,10)||'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ── Candidate Payments Tab ─────────────────────────────────────────────────────
+
+async function loadCandidatePayments() {
+  const payments = await fetch('/api/candidate-payments').then(r => r.json());
+  const panel = document.getElementById('panel-cand-payments');
+  if (!payments.length) { panel.innerHTML = '<p>No candidate payment submissions yet.</p>'; return; }
+  panel.innerHTML = `<table>
+    <thead><tr><th>Candidate</th><th>UTR Number</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+    <tbody>${payments.map(p => `<tr>
+      <td><strong>${esc(p.candidate_name)}</strong><br><small>${esc(p.candidate_emails)}</small></td>
+      <td>${esc(p.utr_number)}</td>
+      <td>₹${p.amount}</td>
+      <td><span class="badge badge-${p.status}">${p.status}</span></td>
+      <td style="white-space:nowrap">${(p.created_at||'').slice(0,10)||'—'}</td>
+      <td>
+        ${p.status==='pending' ? `
+          <button class="action btn-verify" onclick="verifyCandidatePayment(${p.id})">Verify</button>
+          <button class="action btn-reject" onclick="rejectCandidatePayment(${p.id})">Reject</button>
+        ` : esc(p.status)}
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function verifyCandidatePayment(payId) {
+  await fetch(`/api/candidate-payments/${payId}/verify`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  loadCandidatePayments();
+  loadCandidates();
+}
+
+async function rejectCandidatePayment(payId) {
+  await fetch(`/api/candidate-payments/${payId}/reject`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+  loadCandidatePayments();
+}
+
+pollStatus();
+pollJobsStatus();
 switchTab(location.hash.replace('#', '') || 'dealers');
 
 // ── Live Logs ─────────────────────────────────────────────────────────────────

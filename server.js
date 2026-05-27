@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const {
-  openDb, addDealer, getDealers, getLeads, toggleDealer,
+  openDb, addDealer, getDealers, getLeads, toggleDealer, updateDealer,
   getUnmatchedLeads, getAllLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, saveLead, incrementDealerLeadCount,
@@ -51,6 +51,17 @@ function createApp(db) {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
     try {
       toggleDealer(db, parseInt(req.params.id), req.body.active);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update dealer' });
+    }
+  });
+
+  app.put('/api/dealers/:id', (req, res) => {
+    const { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
+    if (!name || !emails || !industry_category) return res.status(400).json({ error: 'name, emails, industry_category required' });
+    try {
+      updateDealer(db, parseInt(req.params.id), { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });

@@ -38,6 +38,19 @@
     .badge-assigned { background: #e6f4ea; color: #1e7e34; }
     .badge-unmatched { background: #f3e8fd; color: #6a1b9a; }
     button.action { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
+    .btn-edit { background: #e8f0fe; color: #1a73e8; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 8px; padding: 28px 32px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 24px rgba(0,0,0,.2); }
+    .modal-box h3 { margin: 0 0 20px; font-size: 17px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-grid .full { grid-column: 1/-1; }
+    .modal-grid label { display: flex; flex-direction: column; font-size: 12px; color: #555; gap: 4px; }
+    .modal-grid input, .modal-grid textarea { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; }
+    .modal-grid textarea { resize: vertical; min-height: 60px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .btn-save { padding: 8px 20px; background: #1a73e8; color: #fff; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; font-weight: bold; }
+    .btn-cancel { padding: 8px 16px; background: #f1f3f4; color: #444; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
     .btn-verify { background: #e6f4ea; color: #1e7e34; }
     .btn-reject { background: #fce8e6; color: #c62828; }
     .btn-toggle-on { background: #fce8e6; color: #c62828; }
@@ -171,7 +184,10 @@ function renderDealers() {
       <td>${d.subscription_status==='active' ? d.lead_count+'/∞' : d.lead_count+'/2'}</td>
       <td><span class="badge badge-${d.subscription_status==='active'?'active':'free'}">${d.subscription_status==='active'?'Active':'Free'}</span></td>
       <td>${d.subscription_expires_at ? d.subscription_expires_at.slice(0,10) : '—'}</td>
-      <td><button class="action ${d.active?'btn-toggle-on':'btn-toggle-off'}" onclick="toggleDealer(${d.id},${d.active?0:1})">${d.active?'Disable':'Enable'}</button></td>
+      <td>
+        <button class="action btn-edit" onclick="openEditModal(${d.id})">Edit</button>
+        <button class="action ${d.active?'btn-toggle-on':'btn-toggle-off'}" onclick="toggleDealer(${d.id},${d.active?0:1})">${d.active?'Disable':'Enable'}</button>
+      </td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
@@ -481,6 +497,91 @@ async function pollStatus() {
 pollStatus();
 
 loadDealers();
+
+// ── Edit Dealer Modal ─────────────────────────────────────────────────────────
+
+let editingDealerId = null;
+
+function openEditModal(id) {
+  const d = allDealers.find(x => x.id === id);
+  if (!d) return;
+  editingDealerId = id;
+  document.getElementById('edit-name').value = d.name || '';
+  document.getElementById('edit-emails').value = d.emails || '';
+  document.getElementById('edit-industry_category').value = d.industry_category || d.industry || '';
+  document.getElementById('edit-services').value = d.services || '';
+  document.getElementById('edit-target_customers').value = d.target_customers || '';
+  document.getElementById('edit-keywords').value = d.keywords || '';
+  document.getElementById('edit-state').value = d.state || '';
+  document.getElementById('edit-city').value = d.city || '';
+  document.getElementById('edit-service_areas').value = d.service_areas || '';
+  document.getElementById('edit-custom_subreddits').value = d.custom_subreddits || '';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('open');
+  editingDealerId = null;
+}
+
+async function saveDealer() {
+  if (!editingDealerId) return;
+  const body = {
+    name: document.getElementById('edit-name').value.trim(),
+    emails: document.getElementById('edit-emails').value.trim(),
+    industry_category: document.getElementById('edit-industry_category').value.trim(),
+    services: document.getElementById('edit-services').value.trim(),
+    target_customers: document.getElementById('edit-target_customers').value.trim(),
+    keywords: document.getElementById('edit-keywords').value.trim(),
+    state: document.getElementById('edit-state').value.trim(),
+    city: document.getElementById('edit-city').value.trim(),
+    service_areas: document.getElementById('edit-service_areas').value.trim(),
+    custom_subreddits: document.getElementById('edit-custom_subreddits').value.trim(),
+  };
+  if (!body.name || !body.emails || !body.industry_category) {
+    alert('Name, emails, and category are required.');
+    return;
+  }
+  const btn = document.getElementById('editSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await fetch(`/api/dealers/${editingDealerId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) { closeEditModal(); loadDealers(); }
+    else alert('Error: ' + data.error);
+  } catch (e) {
+    alert('Failed to save. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
 </script>
+
+<!-- Edit Dealer Modal -->
+<div id="editModal" class="modal-overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal-box">
+    <h3>Edit Dealer</h3>
+    <div class="modal-grid">
+      <label class="full">Name <input id="edit-name" type="text"></label>
+      <label class="full">Emails (comma-separated) <input id="edit-emails" type="text"></label>
+      <label class="full">Industry / Category <input id="edit-industry_category" type="text"></label>
+      <label class="full">Services <textarea id="edit-services"></textarea></label>
+      <label class="full">Target Customers <textarea id="edit-target_customers"></textarea></label>
+      <label class="full">Keywords <textarea id="edit-keywords"></textarea></label>
+      <label>State <input id="edit-state" type="text"></label>
+      <label>City <input id="edit-city" type="text"></label>
+      <label class="full">Service Areas <input id="edit-service_areas" type="text" placeholder="e.g. Sector 15, Noida, NCR"></label>
+      <label class="full">Custom Subreddits <input id="edit-custom_subreddits" type="text" placeholder="e.g. r/Delhi, r/Noida"></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-save" id="editSaveBtn" onclick="saveDealer()">Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

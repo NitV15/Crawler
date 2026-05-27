@@ -149,6 +149,14 @@ function toggleDealer(db, id, active) {
   db.prepare('UPDATE dealers SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
 }
 
+function updateDealer(db, id, { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits }) {
+  db.prepare(`
+    UPDATE dealers SET name=?, emails=?, industry_category=?, industry=?, services=?,
+    target_customers=?, keywords=?, state=?, city=?, service_areas=?, custom_subreddits=?
+    WHERE id=?
+  `).run(name, emails, industry_category, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits, id);
+}
+
 function incrementDealerLeadCount(db, dealerId) {
   db.prepare('UPDATE dealers SET lead_count = lead_count + 1 WHERE id = ?').run(dealerId);
 }
@@ -241,7 +249,7 @@ function markPostSeen(db, postId) {
 }
 
 module.exports = {
-  openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer,
+  openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer, updateDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getUnmatchedLeads, getAllLeads, assignLead,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,

@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { getLogs, subscribe } = require('./logger'); // must be first to capture all logs
 const express = require('express');
 const path = require('path');
 const {
@@ -194,6 +195,23 @@ function createApp(db) {
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.get('/api/logs', (req, res) => {
+    res.json(getLogs());
+  });
+
+  app.get('/api/logs/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const unsub = subscribe(entry => {
+      res.write(`data: ${JSON.stringify(entry)}\n\n`);
+    });
+
+    req.on('close', unsub);
   });
 
   app.post('/api/leads/:id/assign', async (req, res) => {

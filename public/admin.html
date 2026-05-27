@@ -71,6 +71,21 @@
     .source-ig { color: #c13584; font-size: 12px; }
     .source-im { color: #e65c00; font-size: 12px; }
     .source-reddit { color: #ff4500; font-size: 12px; }
+    #log-box { background: #1e1e1e; border-radius: 6px; padding: 12px 16px; height: 520px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.6; }
+    .log-line { display: flex; gap: 10px; border-bottom: 1px solid #2a2a2a; padding: 2px 0; }
+    .log-time { color: #888; flex-shrink: 0; }
+    .log-info .log-msg { color: #d4d4d4; }
+    .log-warn .log-msg { color: #f0c674; }
+    .log-error .log-msg { color: #ff6b6b; }
+    .log-level { width: 36px; flex-shrink: 0; font-weight: bold; }
+    .log-info .log-level { color: #6ab4f5; }
+    .log-warn .log-level { color: #f0c674; }
+    .log-error .log-level { color: #ff6b6b; }
+    #log-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    #log-controls button { padding: 6px 14px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    #logClearBtn { background: #f1f3f4; color: #444; }
+    #logScrollBtn { background: #e8f0fe; color: #1a73e8; }
+    #logStatus { font-size: 12px; color: #888; }
   </style>
 </head>
 <body>
@@ -92,6 +107,7 @@
   <div class="tab" onclick="switchTab('unmatched')">Unmatched Leads</div>
   <div class="tab" onclick="switchTab('payments')">Payments</div>
   <div class="tab" onclick="switchTab('fetched')">Fetched Posts</div>
+  <div class="tab" onclick="switchTab('logs')">Logs</div>
 </div>
 
 <div id="panel-dealers" class="panel active"></div>
@@ -100,6 +116,7 @@
 <div id="panel-unmatched" class="panel"></div>
 <div id="panel-payments" class="panel"></div>
 <div id="panel-fetched" class="panel"></div>
+<div id="panel-logs" class="panel"></div>
 
 <script>
 let allDealers = [];
@@ -107,7 +124,7 @@ let allLeadsRaw = [];
 let matchedRaw = [];
 let unmatchedRaw = [];
 
-const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched'];
+const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched','logs'];
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
@@ -119,6 +136,7 @@ function switchTab(name) {
   else if (name === 'unmatched') loadUnmatched();
   else if (name === 'payments') loadPayments();
   else if (name === 'fetched') loadFetchedPosts();
+  else if (name === 'logs') initLogs();
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -497,6 +515,73 @@ async function pollStatus() {
 pollStatus();
 
 loadDealers();
+
+// ── Live Logs ─────────────────────────────────────────────────────────────────
+
+let logEs = null;
+let logAutoScroll = true;
+
+function initLogs() {
+  const panel = document.getElementById('panel-logs');
+  if (document.getElementById('log-box')) return; // already initialised
+  panel.innerHTML = `
+    <div id="log-controls">
+      <span id="logStatus">⚪ Connecting…</span>
+      <button id="logScrollBtn" onclick="toggleAutoScroll()">Auto-scroll: ON</button>
+      <button id="logClearBtn" onclick="clearLogs()">Clear</button>
+    </div>
+    <div id="log-box"></div>`;
+  loadExistingLogs();
+  connectLogStream();
+}
+
+async function loadExistingLogs() {
+  try {
+    const logs = await fetch('/api/logs').then(r => r.json());
+    logs.forEach(appendLogLine);
+    scrollLogsToBottom();
+  } catch(e) {}
+}
+
+function connectLogStream() {
+  if (logEs) logEs.close();
+  logEs = new EventSource('/api/logs/stream');
+  logEs.onopen = () => { const el = document.getElementById('logStatus'); if (el) el.textContent = '🟢 Live'; };
+  logEs.onmessage = e => {
+    try { appendLogLine(JSON.parse(e.data)); } catch(_) {}
+  };
+  logEs.onerror = () => { const el = document.getElementById('logStatus'); if (el) el.textContent = '🔴 Disconnected — retrying…'; };
+}
+
+function appendLogLine(entry) {
+  const box = document.getElementById('log-box');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.className = `log-line log-${entry.level}`;
+  const t = entry.t ? entry.t.slice(11,19) : '';
+  div.innerHTML = `<span class="log-time">${esc(t)}</span><span class="log-level">${entry.level.toUpperCase().slice(0,3)}</span><span class="log-msg">${esc(entry.msg)}</span>`;
+  box.appendChild(div);
+  // keep max 500 visible lines
+  while (box.children.length > 500) box.removeChild(box.firstChild);
+  if (logAutoScroll) scrollLogsToBottom();
+}
+
+function scrollLogsToBottom() {
+  const box = document.getElementById('log-box');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+
+function toggleAutoScroll() {
+  logAutoScroll = !logAutoScroll;
+  const btn = document.getElementById('logScrollBtn');
+  if (btn) btn.textContent = `Auto-scroll: ${logAutoScroll ? 'ON' : 'OFF'}`;
+  if (logAutoScroll) scrollLogsToBottom();
+}
+
+function clearLogs() {
+  const box = document.getElementById('log-box');
+  if (box) box.innerHTML = '';
+}
 
 // ── Edit Dealer Modal ─────────────────────────────────────────────────────────
 

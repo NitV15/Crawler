@@ -12,13 +12,12 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.52.0",
     "@google/genai": "^2.3.0",
     "better-sqlite3": "^11.0.0",
     "dotenv": "^17.4.2",
     "express": "^4.18.0",
     "nodemailer": "^6.9.0",
-    "puppeteer": "^25.0.4",
+    "puppeteer": "^20.9.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },

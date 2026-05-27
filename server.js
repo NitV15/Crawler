@@ -279,27 +279,22 @@ function createApp(db) {
           postLocation: lead.post_location,
           status: 'assigned',
         });
-        const action = checkSubscription(dealer);
-        if (action === 'skip') {
-          console.log(`[admin] ↷ skip email — ${dealer.name} (free limit reached)`);
-        } else if (action === 'expired') {
-          console.log(`[admin] ↷ skip email — ${dealer.name} (subscription expired)`);
-        } else {
-          try {
-            await sendLeadEmail({
-              dealer,
-              post: { title: lead.post_title, text: lead.post_text, subreddit: lead.subreddit, url: lead.post_url, whatToSell: lead.what_to_sell },
-              suggestedReply: lead.suggested_reply || '(Manually assigned by admin)',
-              includeSubscribeFooter: action === 'send_with_footer',
-              paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
-            });
-            incrementDealerLeadCount(db, dealer.id);
-            console.log(`[admin] ✓ email sent → ${dealer.name} (${dealer.emails})`);
-          } catch (e) {
-            const msg = `Email failed for ${dealer.name}: ${e.message}`;
-            console.error(`[admin] ✗ ${msg}`);
-            errors.push(msg);
-          }
+        const isActive = dealer.subscription_status === 'active' &&
+          dealer.subscription_expires_at && new Date(dealer.subscription_expires_at) > new Date();
+        try {
+          await sendLeadEmail({
+            dealer,
+            post: { title: lead.post_title, text: lead.post_text, subreddit: lead.subreddit, url: lead.post_url, whatToSell: lead.what_to_sell },
+            suggestedReply: lead.suggested_reply || '(Manually assigned by admin)',
+            includeSubscribeFooter: !isActive,
+            paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
+          });
+          incrementDealerLeadCount(db, dealer.id);
+          console.log(`[admin] ✓ email sent → ${dealer.name} (${dealer.emails})${!isActive ? ' [subscribe footer included]' : ''}`);
+        } catch (e) {
+          const msg = `Email failed for ${dealer.name}: ${e.message}`;
+          console.error(`[admin] ✗ ${msg}`);
+          errors.push(msg);
         }
       }
       assignLead(db, leadId, parseInt(dealer_ids[0]));

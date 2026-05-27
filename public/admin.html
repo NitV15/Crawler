@@ -21,6 +21,8 @@
     #crawlResult { font-size: 13px; margin-left: 12px; color: #e8f0fe; }
     #startJobsBtn { padding: 8px 18px; background: #fff; color: #1a73e8; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
     #startJobsBtn:disabled { background: #ccc; color: #666; cursor: not-allowed; }
+    #stopJobsBtn { padding: 8px 18px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.6); border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; margin-left: 8px; }
+    #stopJobsBtn:disabled { opacity: 0.4; cursor: not-allowed; }
     .tabs { display: flex; background: #fff; border-bottom: 2px solid #ddd; padding: 0 24px; overflow-x: auto; }
     .tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: bold; color: #555; white-space: nowrap; }
     .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
@@ -116,7 +118,7 @@
     <button id="cleanupBtn" onclick="runCleanup()" style="margin-left:16px">Cleanup Old Data</button>
     <span style="margin-left:16px;border-left:1px solid rgba(255,255,255,0.3);padding-left:16px">
       <button id="startJobsBtn" onclick="startJobsCrawler()">▶ Start Jobs</button>
-      <button id="stopJobsBtn" onclick="stopJobsCrawler()" disabled style="padding:8px 18px;background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:4px;font-size:14px;font-weight:bold;cursor:pointer;margin-left:8px">■ Stop Jobs</button>
+      <button id="stopJobsBtn" onclick="stopJobsCrawler()" disabled>■ Stop Jobs</button>
       <span id="jobsStatus" style="font-size:13px;margin-left:12px;color:#e8f0fe">⚫ Stopped</span>
       <span id="jobsStats" style="font-size:12px;color:#b3d1ff;margin-left:12px"></span>
     </span>
@@ -628,6 +630,8 @@ async function pollStatus() {
 let jobsStatusPollTimer = null;
 
 async function startJobsCrawler() {
+  document.getElementById('startJobsBtn').disabled = true;
+  document.getElementById('stopJobsBtn').disabled = false;
   await fetch('/api/jobs/start', { method: 'POST' });
   pollJobsStatus();
 }

@@ -226,6 +226,59 @@ function createApp(db) {
     }
   });
 
+  app.post('/api/leads/:id/assign-many', async (req, res) => {
+    const leadId = parseInt(req.params.id);
+    const { dealer_ids } = req.body;
+    if (!Array.isArray(dealer_ids) || !dealer_ids.length) {
+      return res.status(400).json({ error: 'dealer_ids array required' });
+    }
+    try {
+      const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
+      if (!lead) return res.status(404).json({ error: 'Lead not found' });
+      const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+      const errors = [];
+      for (const rawId of dealer_ids) {
+        const dealerId = parseInt(rawId);
+        const dealer = getDealer(db, dealerId);
+        if (!dealer) { errors.push(`Dealer ${dealerId} not found`); continue; }
+        const newLeadId = saveLead(db, {
+          dealerId,
+          redditPostId: lead.reddit_post_id + '_assign' + dealerId,
+          postTitle: lead.post_title,
+          postText: lead.post_text,
+          postUrl: lead.post_url,
+          subreddit: lead.subreddit,
+          matchReason: 'Manual assign from admin',
+          suggestedReply: lead.suggested_reply,
+          whatToSell: lead.what_to_sell,
+          leadCategory: lead.lead_category,
+          postLocation: lead.post_location,
+          status: 'assigned',
+        }).lastInsertRowid;
+        const action = checkSubscription(dealer);
+        if (action !== 'skip' && action !== 'expired') {
+          try {
+            await sendLeadEmail({
+              dealer,
+              post: { title: lead.post_title, text: lead.post_text, subreddit: lead.subreddit, url: lead.post_url, whatToSell: lead.what_to_sell },
+              suggestedReply: lead.suggested_reply || '(Manually assigned by admin)',
+              includeSubscribeFooter: action === 'send_with_footer',
+              paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
+            });
+            incrementDealerLeadCount(db, dealer.id);
+          } catch (e) {
+            errors.push(`Email failed for dealer ${dealer.id}: ${e.message}`);
+          }
+        }
+      }
+      // mark original lead assigned
+      assignLead(db, leadId, parseInt(dealer_ids[0]));
+      res.json({ success: true, errors: errors.length ? errors : undefined });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return app;
 }
 

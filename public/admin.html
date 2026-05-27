@@ -57,6 +57,9 @@
     .btn-toggle-off { background: #e6f4ea; color: #1e7e34; }
     .btn-send { background: #e8f0fe; color: #1a73e8; }
     select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; }
+    .dealer-checklist { max-height: 96px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 4px 6px; background: #fff; min-width: 160px; }
+    .dealer-checklist label { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 0; cursor: pointer; white-space: nowrap; }
+    .dealer-checklist label:hover { color: #1a73e8; }
     .reply-cell { max-width: 200px; font-size: 12px; color: #555; white-space: pre-wrap; word-break: break-word; }
     .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
     .filter-bar input[type=text], .filter-bar input[type=search] {
@@ -325,7 +328,9 @@ function renderUnmatched() {
   const el = document.getElementById('unmatched-table');
   if (!el) return;
   if (!rows.length) { el.innerHTML = '<p>No unmatched leads found.</p>'; return; }
-  const dealerOpts = allDealers.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  const dealerChecks = (leadId) => allDealers.map(d =>
+    `<label><input type="checkbox" value="${d.id}" name="assign-${leadId}"> ${esc(d.name)}</label>`
+  ).join('');
   el.innerHTML = `<p class="count-badge">${rows.length} lead${rows.length!==1?'s':''}</p>
   <table>
     <thead><tr><th>Post</th><th>Source</th><th>Location</th><th>What to Sell</th><th>Suggested Reply</th><th>Date</th><th>Assign &amp; Send</th></tr></thead>
@@ -336,11 +341,9 @@ function renderUnmatched() {
       <td>${esc(l.what_to_sell||'—')}</td>
       <td class="reply-cell">${esc(l.suggested_reply||'—').slice(0,120)}</td>
       <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
-      <td style="white-space:nowrap">
-        <select class="assign" id="assign-${l.id}">
-          <option value="">— Dealer —</option>${dealerOpts}
-        </select>
-        <button class="action btn-send" onclick="assignLead(${l.id})">Send</button>
+      <td>
+        <div class="dealer-checklist">${dealerChecks(l.id)}</div>
+        <button class="action btn-send" style="margin-top:4px" onclick="assignLead(${l.id})">Send</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -456,9 +459,16 @@ async function rejectPayment(payId) {
 }
 
 async function assignLead(leadId) {
-  const dealerId = document.getElementById('assign-' + leadId).value;
-  if (!dealerId) { alert('Please select a dealer first'); return; }
-  await fetch(`/api/leads/${leadId}/assign`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ dealer_id: dealerId }) });
+  const checked = [...document.querySelectorAll(`input[name="assign-${leadId}"]:checked`)];
+  if (!checked.length) { alert('Please select at least one dealer'); return; }
+  const dealer_ids = checked.map(c => parseInt(c.value));
+  const res = await fetch(`/api/leads/${leadId}/assign-many`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dealer_ids }),
+  });
+  const data = await res.json();
+  if (data.errors?.length) alert('Sent with some errors:\n' + data.errors.join('\n'));
   loadUnmatched();
 }
 

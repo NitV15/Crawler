@@ -76,6 +76,50 @@ function initSchema(db) {
       post_id TEXT PRIMARY KEY,
       checked_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS candidates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      emails TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT '',
+      skills TEXT NOT NULL DEFAULT '',
+      experience_level TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      state TEXT NOT NULL DEFAULT '',
+      preferred_locations TEXT NOT NULL DEFAULT '',
+      lead_count INTEGER DEFAULT 0,
+      subscription_status TEXT DEFAULT 'free',
+      subscription_expires_at TEXT DEFAULT NULL,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS job_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id INTEGER,
+      indeed_job_id TEXT NOT NULL,
+      job_title TEXT,
+      company TEXT,
+      location TEXT,
+      job_url TEXT NOT NULL,
+      snippet TEXT,
+      suggested_tip TEXT,
+      status TEXT DEFAULT 'matched',
+      emailed_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+    );
+    CREATE TABLE IF NOT EXISTS candidate_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id INTEGER NOT NULL,
+      utr_number TEXT NOT NULL,
+      amount INTEGER DEFAULT 1,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      verified_at TEXT DEFAULT NULL,
+      FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+    );
+    CREATE TABLE IF NOT EXISTS seen_jobs (
+      job_id TEXT PRIMARY KEY,
+      checked_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -248,6 +292,98 @@ function markPostSeen(db, postId) {
   db.prepare('INSERT OR IGNORE INTO seen_posts (post_id) VALUES (?)').run(postId);
 }
 
+function getActiveCandidates(db) {
+  return db.prepare('SELECT * FROM candidates WHERE active = 1').all();
+}
+
+function getCandidate(db, id) {
+  return db.prepare('SELECT * FROM candidates WHERE id = ?').get(id);
+}
+
+function addCandidate(db, { name, emails, role, skills, experience_level, city, state, preferred_locations }) {
+  return db.prepare(`
+    INSERT INTO candidates (name, emails, role, skills, experience_level, city, state, preferred_locations)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, emails, role || '', skills || '', experience_level || '', city || '', state || '', preferred_locations || '');
+}
+
+function getCandidates(db) {
+  return db.prepare('SELECT * FROM candidates ORDER BY id ASC').all();
+}
+
+function toggleCandidate(db, id, active) {
+  db.prepare('UPDATE candidates SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
+}
+
+function updateCandidate(db, id, { name, emails, role, skills, experience_level, city, state, preferred_locations }) {
+  db.prepare(`
+    UPDATE candidates SET name=?, emails=?, role=?, skills=?, experience_level=?, city=?, state=?, preferred_locations=?
+    WHERE id=?
+  `).run(name, emails, role, skills, experience_level, city, state, preferred_locations, id);
+}
+
+function incrementCandidateLeadCount(db, candidateId) {
+  db.prepare('UPDATE candidates SET lead_count = lead_count + 1 WHERE id = ?').run(candidateId);
+}
+
+function activateCandidateSubscription(db, candidateId) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`UPDATE candidates SET subscription_status = 'active', subscription_expires_at = ?, lead_count = 0 WHERE id = ?`).run(expiresAt, candidateId);
+}
+
+function resetCandidateSubscription(db, candidateId) {
+  db.prepare(`UPDATE candidates SET subscription_status = 'free', subscription_expires_at = NULL, lead_count = 0 WHERE id = ?`).run(candidateId);
+}
+
+function saveJobMatch(db, { candidateId, indeedJobId, jobTitle, company, location, jobUrl, snippet, suggestedTip, status }) {
+  return db.prepare(`
+    INSERT INTO job_matches (candidate_id, indeed_job_id, job_title, company, location, job_url, snippet, suggested_tip, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(candidateId ?? null, indeedJobId, jobTitle, company, location, jobUrl, snippet || '', suggestedTip || '', status || 'matched');
+}
+
+function getJobMatches(db, limit = 200) {
+  return db.prepare(`
+    SELECT jm.*, c.name as candidate_name
+    FROM job_matches jm
+    LEFT JOIN candidates c ON jm.candidate_id = c.id
+    ORDER BY jm.id DESC LIMIT ?
+  `).all(limit);
+}
+
+function addCandidatePayment(db, { candidateId, utrNumber }) {
+  return db.prepare(`INSERT INTO candidate_payments (candidate_id, utr_number) VALUES (?, ?)`).run(candidateId, utrNumber);
+}
+
+function getCandidatePayment(db, id) {
+  return db.prepare('SELECT * FROM candidate_payments WHERE id = ?').get(id);
+}
+
+function getCandidatePayments(db) {
+  return db.prepare(`
+    SELECT cp.*, c.name as candidate_name, c.emails as candidate_emails
+    FROM candidate_payments cp
+    JOIN candidates c ON cp.candidate_id = c.id
+    ORDER BY cp.id DESC
+  `).all();
+}
+
+function verifyCandidatePayment(db, paymentId) {
+  db.prepare(`UPDATE candidate_payments SET status = 'verified', verified_at = datetime('now') WHERE id = ?`).run(paymentId);
+}
+
+function rejectCandidatePayment(db, paymentId) {
+  db.prepare(`UPDATE candidate_payments SET status = 'rejected' WHERE id = ?`).run(paymentId);
+}
+
+function isSeenJob(db, jobId) {
+  return !!db.prepare('SELECT job_id FROM seen_jobs WHERE job_id = ?').get(jobId);
+}
+
+function markJobSeen(db, jobId) {
+  db.prepare('INSERT OR IGNORE INTO seen_jobs (job_id) VALUES (?)').run(jobId);
+}
+
 module.exports = {
   openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer, updateDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
@@ -255,4 +391,9 @@ module.exports = {
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   saveFetchedPost, getFetchedPosts,
   isSeenPost, markPostSeen,
+  getActiveCandidates, getCandidate, addCandidate, getCandidates, toggleCandidate, updateCandidate,
+  incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,
+  saveJobMatch, getJobMatches,
+  addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
+  isSeenJob, markJobSeen,
 };

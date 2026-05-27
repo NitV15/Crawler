@@ -370,7 +370,7 @@ function renderUnmatched() {
             <div class="ms-list" id="ms-list-${l.id}">${dealerItems.replace(/LEADID/g, l.id)}</div>
           </div>
         </div>
-        <button class="action btn-send" style="margin-top:4px" onclick="assignLead(${l.id})">Send</button>
+        <button class="action btn-send" style="margin-top:4px" onclick="assignLead(${l.id},this)">Send</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -532,10 +532,11 @@ document.addEventListener('click', e => {
   }
 });
 
-async function assignLead(leadId) {
+async function assignLead(leadId, btn) {
   const checked = [...document.querySelectorAll(`#ms-list-${leadId} input:checked`)];
   if (!checked.length) { alert('Please select at least one dealer'); return; }
   const dealer_ids = checked.map(c => parseInt(c.value));
+  if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
   const res = await fetch(`/api/leads/${leadId}/assign-many`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -543,7 +544,16 @@ async function assignLead(leadId) {
   });
   const data = await res.json();
   if (data.errors?.length) alert('Sent with some errors:\n' + data.errors.join('\n'));
-  loadUnmatched();
+  if (btn) {
+    const row = btn.closest('tr');
+    if (row) {
+      row.style.background = '#e8f5e9';
+      btn.textContent = 'Assigned ✓';
+      btn.style.background = '#28a745';
+      btn.style.color = '#fff';
+    }
+  }
+  setTimeout(loadUnmatched, 1200);
 }
 
 async function runCleanup() {

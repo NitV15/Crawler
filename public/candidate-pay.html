@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscribe — Unlimited Job Alerts</title>
+  <style>
+    body { font-family: sans-serif; max-width: 480px; margin: 40px auto; padding: 0 20px; text-align: center; }
+    h2 { margin-bottom: 4px; }
+    .subtitle { color: #555; margin-bottom: 24px; }
+    .plan-box { border: 2px solid #1a73e8; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+    .plan-box h3 { margin: 0 0 8px; color: #1a73e8; }
+    .plan-box .price { font-size: 32px; font-weight: bold; color: #1a73e8; }
+    .qr-section { margin: 20px 0; }
+    .qr-section img { max-width: 220px; border: 1px solid #ddd; border-radius: 8px; padding: 8px; }
+    .qr-missing { background: #f8f9fa; border: 2px dashed #ccc; border-radius: 8px; padding: 40px 20px; color: #888; }
+    label { display: block; text-align: left; font-weight: bold; margin-top: 16px; }
+    input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; }
+    button { margin-top: 20px; padding: 12px 32px; background: #1a73e8; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
+    button:hover { background: #1558b0; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #msg { margin-top: 16px; padding: 12px; border-radius: 4px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    #candidate-name { font-weight: bold; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>Subscribe for Unlimited Job Alerts</h2>
+  <p class="subtitle">Hi <span id="candidate-name">...</span></p>
+
+  <div class="plan-box">
+    <h3>Monthly Plan</h3>
+    <div class="price">&#8377;10</div>
+    <p>Unlimited job alerts for 30 days</p>
+  </div>
+
+  <p><strong>Step 1:</strong> Scan the QR code below and pay &#8377;10</p>
+  <div class="qr-section">
+    <img src="/images/upi-qr.png" alt="UPI QR Code"
+         onerror="this.parentNode.innerHTML='<div class=&quot;qr-missing&quot;>QR code image not found.<br>Admin: add upi-qr.png to public/images/</div>'">
+  </div>
+
+  <p><strong>Step 2:</strong> Enter your UPI Transaction ID (UTR number) below</p>
+  <form id="form">
+    <label>UTR Number *
+      <input name="utr_number" required placeholder="e.g. 123456789012">
+    </label>
+    <button type="submit" id="submitBtn">Submit Payment</button>
+  </form>
+  <div id="msg"></div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const candidateId = params.get('candidate_id');
+
+    if (!candidateId) {
+      document.body.innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Invalid payment link.</p>';
+    } else {
+      fetch('/api/candidates/' + candidateId)
+        .then(r => r.json())
+        .then(c => {
+          if (c.error) {
+            document.body.innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Candidate not found.</p>';
+          } else {
+            document.getElementById('candidate-name').textContent = c.name;
+          }
+        });
+
+      document.getElementById('form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Submitting…';
+        const msg = document.getElementById('msg');
+        const utr = e.target.utr_number.value.trim();
+        try {
+          const res = await fetch('/api/candidate-payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidate_id: candidateId, utr_number: utr }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            msg.className = 'success';
+            msg.textContent = 'Payment submitted! We will verify it and activate your subscription shortly.';
+            msg.style.display = 'block';
+            e.target.reset();
+          } else {
+            msg.className = 'error';
+            msg.textContent = data.error || 'Submission failed.';
+            msg.style.display = 'block';
+          }
+        } catch (err) {
+          msg.className = 'error';
+          msg.textContent = 'Network error. Please try again.';
+          msg.style.display = 'block';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Submit Payment';
+      });
+    }
+  </script>
+</body>
+</html>

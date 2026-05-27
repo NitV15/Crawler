@@ -8,7 +8,7 @@ const {
   activateDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts,
 } = require('./db');
-const { runCrawl, checkSubscription } = require('./crawler');
+const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
 const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail } = require('./mailer');
 const { identifyLead } = require('./matcher');
 
@@ -57,13 +57,18 @@ function createApp(db) {
     }
   });
 
-  app.post('/api/crawl/trigger', async (req, res) => {
-    try {
-      const summary = await runCrawl(db);
-      res.json(summary);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+  app.post('/api/crawl/start', (req, res) => {
+    startCrawler(db).catch(err => console.error('[server] Crawler error:', err.message));
+    res.json({ success: true });
+  });
+
+  app.post('/api/crawl/stop', (req, res) => {
+    stopCrawler();
+    res.json({ success: true });
+  });
+
+  app.get('/api/crawl/status', (req, res) => {
+    res.json(getCrawlerStatus());
   });
 
   app.get('/pay', (req, res) => {
@@ -122,7 +127,7 @@ function createApp(db) {
 
   app.post('/api/admin/cleanup', (req, res) => {
     try {
-      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-30 days')`).run();
+      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-2 days')`).run();
       const r2 = db.prepare(`DELETE FROM fetched_posts WHERE fetched_at < datetime('now', '-60 days')`).run();
       const r3 = db.prepare(`DELETE FROM leads WHERE status = 'unmatched' AND emailed_at < datetime('now', '-90 days')`).run();
       db.prepare('VACUUM').run();

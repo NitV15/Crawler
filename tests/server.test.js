@@ -2,7 +2,15 @@ const request = require('supertest');
 const { createApp } = require('../server');
 const { openDb, addDealer, addPayment } = require('../db');
 
-jest.mock('../crawler', () => ({ runCrawl: jest.fn().mockResolvedValue({ fetched: 10, filtered: 2, leads: 1, emails: 1, unmatched: 0 }) }));
+jest.mock('../crawler', () => ({
+  startCrawler: jest.fn().mockResolvedValue(),
+  stopCrawler: jest.fn(),
+  getCrawlerStatus: jest.fn().mockReturnValue({
+    running: false, postsCollected: 0, leadsFound: 0,
+    emailsSent: 0, lastBatchAt: null, currentSource: null,
+  }),
+  checkSubscription: jest.fn().mockReturnValue('send'),
+}));
 jest.mock('../mailer', () => ({
   sendSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(),
   sendPaymentRejectedEmail: jest.fn().mockResolvedValue(),
@@ -42,11 +50,32 @@ test('GET /api/dealers returns dealer list', async () => {
   expect(res.body).toHaveLength(1);
 });
 
-test('POST /api/crawl/trigger runs crawl and returns summary', async () => {
-  const res = await request(app).post('/api/crawl/trigger');
+test('GET /api/crawl/status returns status object with running field', async () => {
+  const res = await request(app).get('/api/crawl/status');
   expect(res.status).toBe(200);
-  expect(res.body.fetched).toBe(10);
-  expect(res.body.leads).toBe(1);
+  expect(res.body).toHaveProperty('running', false);
+  expect(res.body).toHaveProperty('postsCollected');
+});
+
+test('POST /api/crawl/start returns success and calls startCrawler', async () => {
+  const { startCrawler } = require('../crawler');
+  const res = await request(app).post('/api/crawl/start');
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(startCrawler).toHaveBeenCalled();
+});
+
+test('POST /api/crawl/stop returns success and calls stopCrawler', async () => {
+  const { stopCrawler } = require('../crawler');
+  const res = await request(app).post('/api/crawl/stop');
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(stopCrawler).toHaveBeenCalled();
+});
+
+test('POST /api/crawl/trigger returns 404 — route removed', async () => {
+  const res = await request(app).post('/api/crawl/trigger');
+  expect(res.status).toBe(404);
 });
 
 test('POST /api/payments submits UTR', async () => {

@@ -39,6 +39,8 @@
     .badge-unmatched { background: #f3e8fd; color: #6a1b9a; }
     button.action { padding: 5px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
     .btn-edit { background: #e8f0fe; color: #1a73e8; }
+    .btn-sub-start { background: #e6f4ea; color: #1e7e34; }
+    .btn-sub-stop  { background: #fff3e0; color: #e65100; }
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: center; justify-content: center; }
     .modal-overlay.open { display: flex; }
     .modal-box { background: #fff; border-radius: 8px; padding: 28px 32px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 24px rgba(0,0,0,.2); }
@@ -208,6 +210,10 @@ function renderDealers() {
       <td>
         <button class="action btn-edit" onclick="openEditModal(${d.id})">Edit</button>
         <button class="action ${d.active?'btn-toggle-on':'btn-toggle-off'}" onclick="toggleDealer(${d.id},${d.active?0:1})">${d.active?'Disable':'Enable'}</button>
+        ${d.subscription_status==='active'
+          ? `<button class="action btn-sub-stop" onclick="dealerResetSub(${d.id})">Stop Sub</button>`
+          : `<button class="action btn-sub-start" onclick="dealerActivateSub(${d.id})">Activate Sub</button>`
+        }
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -444,6 +450,18 @@ async function sendFetchedPost(postId) {
 
 async function toggleDealer(id, active) {
   await fetch(`/api/dealers/${id}/toggle`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
+  loadDealers();
+}
+
+async function dealerActivateSub(id) {
+  if (!confirm('Activate subscription for this dealer? This sets 30-day active period and resets lead count to 0.')) return;
+  await fetch(`/api/dealers/${id}/activate-subscription`, { method: 'POST' });
+  loadDealers();
+}
+
+async function dealerResetSub(id) {
+  if (!confirm('Stop subscription for this dealer? This resets them to free tier.')) return;
+  await fetch(`/api/dealers/${id}/reset-subscription`, { method: 'POST' });
   loadDealers();
 }
 

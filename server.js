@@ -6,7 +6,7 @@ const {
   openDb, addDealer, getDealers, getLeads, toggleDealer, updateDealer,
   getUnmatchedLeads, getAllLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
-  activateDealerSubscription, saveLead, incrementDealerLeadCount,
+  activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts,
 } = require('./db');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
@@ -66,6 +66,24 @@ function createApp(db) {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });
+    }
+  });
+
+  app.post('/api/dealers/:id/activate-subscription', (req, res) => {
+    try {
+      activateDealerSubscription(db, parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to activate subscription' });
+    }
+  });
+
+  app.post('/api/dealers/:id/reset-subscription', (req, res) => {
+    try {
+      resetDealerSubscription(db, parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to reset subscription' });
     }
   });
 

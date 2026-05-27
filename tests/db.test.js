@@ -32,6 +32,11 @@ test('openDb creates payments table', () => {
   expect(tables).toContain('payments');
 });
 
+test('openDb does NOT create seen_posts table', () => {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
+  expect(tables).not.toContain('seen_posts');
+});
+
 test('addDealer stores new fields', () => {
   addDealer(db, dealer);
   const d = db.prepare('SELECT * FROM dealers WHERE name = ?').get('Test Co');

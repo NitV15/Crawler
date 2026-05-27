@@ -53,10 +53,6 @@ function initSchema(db) {
       emailed_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (dealer_id) REFERENCES dealers(id)
     );
-    CREATE TABLE IF NOT EXISTS seen_posts (
-      post_id TEXT PRIMARY KEY,
-      checked_at TEXT DEFAULT (datetime('now'))
-    );
     CREATE TABLE IF NOT EXISTS payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       dealer_id INTEGER NOT NULL,
@@ -162,14 +158,6 @@ function resetDealerSubscription(db, dealerId) {
   db.prepare(`UPDATE dealers SET subscription_status = 'free', subscription_expires_at = NULL, lead_count = 0 WHERE id = ?`).run(dealerId);
 }
 
-function isSeenPost(db, postId) {
-  return !!db.prepare('SELECT post_id FROM seen_posts WHERE post_id = ?').get(postId);
-}
-
-function markPostSeen(db, postId) {
-  db.prepare('INSERT OR IGNORE INTO seen_posts (post_id) VALUES (?)').run(postId);
-}
-
 function saveLead(db, { dealerId, redditPostId, postTitle, postText, postUrl, subreddit, matchReason, suggestedReply, whatToSell, leadCategory, postLocation, status }) {
   return db.prepare(`
     INSERT INTO leads (dealer_id, reddit_post_id, post_title, post_text, post_url, subreddit, match_reason, suggested_reply, what_to_sell, lead_category, post_location, status)
@@ -243,7 +231,7 @@ function rejectPayment(db, paymentId) {
 module.exports = {
   openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
-  isSeenPost, markPostSeen, saveLead, getLeads, getUnmatchedLeads, getAllLeads, assignLead,
+  saveLead, getLeads, getUnmatchedLeads, getAllLeads, assignLead,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   saveFetchedPost, getFetchedPosts,
 };

@@ -3,7 +3,6 @@ jest.mock('../matcher');
 jest.mock('../mailer');
 jest.mock('../prefilter');
 jest.mock('../subreddits');
-jest.mock('../indiamart-fetcher');
 jest.mock('../instagram-fetcher');
 
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('../crawler');
@@ -12,7 +11,6 @@ const { processPostBatch } = require('../matcher');
 const { sendLeadEmail } = require('../mailer');
 const { shouldCheckPost } = require('../prefilter');
 const { buildSubredditList } = require('../subreddits');
-const { fetchIndiaMartLeads } = require('../indiamart-fetcher');
 const { fetchInstagramLeads } = require('../instagram-fetcher');
 
 const fakeDb = {};
@@ -56,7 +54,6 @@ beforeEach(() => {
   shouldCheckPost.mockReturnValue(true);
   buildSubredditList.mockReturnValue(['india']);
   processPostBatch.mockResolvedValue([]);
-  fetchIndiaMartLeads.mockResolvedValue([]);
   fetchInstagramLeads.mockResolvedValue([]);
 });
 

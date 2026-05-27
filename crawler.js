@@ -5,7 +5,6 @@ const { shouldCheckPost } = require('./prefilter');
 const { buildSubredditList } = require('./subreddits');
 const { processPostBatch } = require('./matcher');
 const { sendLeadEmail } = require('./mailer');
-const { fetchIndiaMartLeads } = require('./indiamart-fetcher');
 const { fetchInstagramLeads } = require('./instagram-fetcher');
 
 const BATCH_SIZE = 200;
@@ -199,34 +198,6 @@ async function runCycle(db) {
       }
     } catch (err) {
       console.error(`[crawler] Instagram failed: ${err.message}`);
-    }
-  }
-
-  if (crawlerState.running && buffer.length < BATCH_SIZE) {
-    crawlerState.currentSource = 'IndiaMART';
-    try {
-      const raw = await fetchIndiaMartLeads(dealers);
-      for (const p of raw) {
-        const post = {
-          post_id: `indiamart_${p.id || p.post_id || Date.now()}`,
-          title: p.title || '',
-          text: p.selftext || p.text || '',
-          subreddit: 'indiamart',
-          source: 'indiamart',
-          created_utc: p.created_utc || (Date.now() / 1000),
-          url: p.permalink || p.url || '',
-        };
-        if (post.created_utc < fiveDaysAgo) continue;
-        if (seenThisCycle.has(post.post_id)) continue;
-        if (isSeenPost(db, post.post_id)) continue;
-        seenThisCycle.add(post.post_id);
-        markPostSeen(db, post.post_id);
-        buffer.push(post);
-        crawlerState.postsCollected++;
-        saveFetchedPost(db, { postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: 'indiamart' });
-      }
-    } catch (err) {
-      console.error(`[crawler] IndiaMART failed: ${err.message}`);
     }
   }
 

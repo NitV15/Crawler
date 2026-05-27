@@ -255,11 +255,17 @@ function createApp(db) {
       if (!lead) return res.status(404).json({ error: 'Lead not found' });
       const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
       const errors = [];
+      console.log(`[admin] Manual assign lead #${leadId} "${(lead.post_title||'').slice(0,50)}" → ${dealer_ids.length} dealer(s)`);
       for (const rawId of dealer_ids) {
         const dealerId = parseInt(rawId);
         const dealer = getDealer(db, dealerId);
-        if (!dealer) { errors.push(`Dealer ${dealerId} not found`); continue; }
-        const newLeadId = saveLead(db, {
+        if (!dealer) {
+          const msg = `Dealer ${dealerId} not found`;
+          console.warn(`[admin] ${msg}`);
+          errors.push(msg);
+          continue;
+        }
+        saveLead(db, {
           dealerId,
           redditPostId: lead.reddit_post_id + '_assign' + dealerId,
           postTitle: lead.post_title,
@@ -272,9 +278,13 @@ function createApp(db) {
           leadCategory: lead.lead_category,
           postLocation: lead.post_location,
           status: 'assigned',
-        }).lastInsertRowid;
+        });
         const action = checkSubscription(dealer);
-        if (action !== 'skip' && action !== 'expired') {
+        if (action === 'skip') {
+          console.log(`[admin] ↷ skip email — ${dealer.name} (free limit reached)`);
+        } else if (action === 'expired') {
+          console.log(`[admin] ↷ skip email — ${dealer.name} (subscription expired)`);
+        } else {
           try {
             await sendLeadEmail({
               dealer,
@@ -284,15 +294,19 @@ function createApp(db) {
               paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
             });
             incrementDealerLeadCount(db, dealer.id);
+            console.log(`[admin] ✓ email sent → ${dealer.name} (${dealer.emails})`);
           } catch (e) {
-            errors.push(`Email failed for dealer ${dealer.id}: ${e.message}`);
+            const msg = `Email failed for ${dealer.name}: ${e.message}`;
+            console.error(`[admin] ✗ ${msg}`);
+            errors.push(msg);
           }
         }
       }
-      // mark original lead assigned
       assignLead(db, leadId, parseInt(dealer_ids[0]));
+      console.log(`[admin] Lead #${leadId} marked assigned`);
       res.json({ success: true, errors: errors.length ? errors : undefined });
     } catch (err) {
+      console.error(`[admin] assign-many error: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });

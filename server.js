@@ -8,9 +8,15 @@ const {
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts,
+  addCandidate, getCandidates, getCandidate, toggleCandidate, updateCandidate,
+  activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
+  saveJobMatch, getJobMatches,
+  addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
 } = require('./db');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
-const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail } = require('./mailer');
+const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus } = require('./jobs-crawler');
+const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail,
+        sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail } = require('./mailer');
 const { identifyLead } = require('./matcher');
 
 function createApp(db) {
@@ -18,6 +24,14 @@ function createApp(db) {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(express.static(path.join(__dirname, 'public')));
+
+  app.get('/register-candidate', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register-candidate.html'));
+  });
+
+  app.get('/candidate-pay', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'candidate-pay.html'));
+  });
 
   app.post('/api/register', (req, res) => {
     const { name, emails, industry_category, services, keywords, state, city, target_customers, service_areas, custom_subreddits } = req.body;
@@ -304,6 +318,138 @@ function createApp(db) {
       console.error(`[admin] assign-many error: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ── Candidates ────────────────────────────────────────────────────────────────
+
+  app.post('/api/candidates/register', (req, res) => {
+    const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
+    if (!name || !emails || !role || !skills || !city) {
+      return res.status(400).json({ error: 'Required: name, emails, role, skills, city' });
+    }
+    try {
+      addCandidate(db, { name, emails, role, skills, experience_level, city, state, preferred_locations });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to register candidate' });
+    }
+  });
+
+  app.get('/api/candidates', (req, res) => {
+    try { res.json(getCandidates(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch candidates' }); }
+  });
+
+  app.get('/api/candidates/:id', (req, res) => {
+    const c = getCandidate(db, parseInt(req.params.id));
+    if (!c) return res.status(404).json({ error: 'Candidate not found' });
+    res.json(c);
+  });
+
+  app.put('/api/candidates/:id', (req, res) => {
+    const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
+    if (!name || !emails || !role) return res.status(400).json({ error: 'name, emails, role required' });
+    try {
+      updateCandidate(db, parseInt(req.params.id), { name, emails, role, skills, experience_level, city, state, preferred_locations });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update candidate' });
+    }
+  });
+
+  app.post('/api/candidates/:id/toggle', (req, res) => {
+    if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
+    try {
+      toggleCandidate(db, parseInt(req.params.id), req.body.active);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to update candidate' });
+    }
+  });
+
+  app.post('/api/candidates/:id/activate-subscription', (req, res) => {
+    try {
+      activateCandidateSubscription(db, parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to activate subscription' });
+    }
+  });
+
+  app.post('/api/candidates/:id/reset-subscription', (req, res) => {
+    try {
+      resetCandidateSubscription(db, parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to reset subscription' });
+    }
+  });
+
+  // ── Job Matches ───────────────────────────────────────────────────────────────
+
+  app.get('/api/job-matches', (req, res) => {
+    try { res.json(getJobMatches(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
+  });
+
+  // ── Candidate Payments ────────────────────────────────────────────────────────
+
+  app.post('/api/candidate-payments', (req, res) => {
+    const { candidate_id, utr_number } = req.body;
+    if (!candidate_id || !utr_number) return res.status(400).json({ error: 'candidate_id and utr_number required' });
+    try {
+      addCandidatePayment(db, { candidateId: parseInt(candidate_id), utrNumber: utr_number });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to submit payment' });
+    }
+  });
+
+  app.get('/api/candidate-payments', (req, res) => {
+    try { res.json(getCandidatePayments(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
+  });
+
+  app.post('/api/candidate-payments/:id/verify', async (req, res) => {
+    const payId = parseInt(req.params.id);
+    try {
+      const payment = getCandidatePayment(db, payId);
+      if (!payment) return res.status(404).json({ error: 'Payment not found' });
+      verifyCandidatePayment(db, payId);
+      activateCandidateSubscription(db, payment.candidate_id);
+      const candidate = getCandidate(db, payment.candidate_id);
+      if (candidate) await sendCandidateSubscriptionConfirmationEmail(candidate);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to verify payment' });
+    }
+  });
+
+  app.post('/api/candidate-payments/:id/reject', async (req, res) => {
+    const payId = parseInt(req.params.id);
+    try {
+      const payment = getCandidatePayment(db, payId);
+      if (!payment) return res.status(404).json({ error: 'Payment not found' });
+      rejectCandidatePayment(db, payId);
+      const candidate = getCandidate(db, payment.candidate_id);
+      if (candidate) await sendCandidatePaymentRejectedEmail(candidate);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to reject payment' });
+    }
+  });
+
+  // ── Jobs Crawler ──────────────────────────────────────────────────────────────
+
+  app.post('/api/jobs/start', (req, res) => {
+    startJobsCrawler(db).catch(err => console.error('[server] Jobs crawler error:', err.message));
+    res.json({ success: true });
+  });
+
+  app.post('/api/jobs/stop', (req, res) => {
+    stopJobsCrawler();
+    res.json({ success: true });
+  });
+
+  app.get('/api/jobs/status', (req, res) => {
+    res.json(getJobsCrawlerStatus());
   });
 
   return app;

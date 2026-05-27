@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register for Job Alerts</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    h2 { color: #1a73e8; }
+    .subtitle { color: #555; margin-bottom: 24px; }
+    label { display: block; margin-top: 16px; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    textarea { height: 70px; resize: vertical; }
+    small { color: #666; font-size: 12px; font-weight: normal; }
+    button { margin-top: 24px; padding: 10px 28px; background: #1a73e8; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    button:hover { background: #1558b0; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #msg { margin-top: 16px; padding: 10px; border-radius: 4px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <h2>Get Job Alerts</h2>
+  <p class="subtitle">Register once and receive matching job alerts directly in your inbox.</p>
+  <form id="form">
+    <label>Full Name *<input name="name" required placeholder="e.g. Raj Kumar"></label>
+    <label>Email Address(es) * <small>(comma-separated for multiple)</small>
+      <input name="emails" type="text" required placeholder="e.g. raj@gmail.com">
+    </label>
+    <label>Job Role / Title * <small>(the role you are looking for)</small>
+      <input name="role" required placeholder="e.g. DevOps Engineer, WordPress Developer, React Developer">
+    </label>
+    <label>Skills * <small>(comma-separated)</small>
+      <input name="skills" required placeholder="e.g. Docker, Kubernetes, AWS  or  PHP, WordPress, WooCommerce">
+    </label>
+    <label>Experience Level *
+      <select name="experience_level" required>
+        <option value="">— Select —</option>
+        <option>Fresher</option>
+        <option>1-3 yr</option>
+        <option>3-5 yr</option>
+        <option>5+ yr</option>
+      </select>
+    </label>
+    <label>City * <small>(your preferred job location)</small>
+      <input name="city" required placeholder="e.g. Bangalore, Delhi, Mumbai">
+    </label>
+    <label>State
+      <input name="state" placeholder="e.g. Karnataka, Delhi, Maharashtra">
+    </label>
+    <label>Other Preferred Locations <small>(optional, comma-separated)</small>
+      <input name="preferred_locations" placeholder="e.g. Remote, Noida, Hyderabad">
+    </label>
+    <button type="submit" id="submitBtn">Register for Job Alerts</button>
+  </form>
+  <div id="msg"></div>
+
+  <script>
+    document.getElementById('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Registering…';
+      const msg = document.getElementById('msg');
+      msg.style.display = 'none';
+      const data = Object.fromEntries(new FormData(e.target));
+      try {
+        const res = await fetch('/api/candidates/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const json = await res.json();
+        if (json.success) {
+          msg.className = 'success';
+          msg.textContent = 'You\'re registered! Job alerts will be sent to your email.';
+          msg.style.display = 'block';
+          e.target.reset();
+        } else {
+          msg.className = 'error';
+          msg.textContent = json.error || 'Registration failed. Please try again.';
+          msg.style.display = 'block';
+        }
+      } catch (err) {
+        msg.className = 'error';
+        msg.textContent = 'Network error. Please try again.';
+        msg.style.display = 'block';
+      }
+      btn.disabled = false;
+      btn.textContent = 'Register for Job Alerts';
+    });
+  </script>
+</body>
+</html>

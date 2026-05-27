@@ -142,9 +142,11 @@ let unmatchedRaw = [];
 const TAB_NAMES = ['dealers','total','matched','unmatched','payments','fetched','logs'];
 
 function switchTab(name) {
+  if (!TAB_NAMES.includes(name)) name = 'dealers';
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
+  location.hash = name;
   if (name === 'dealers') loadDealers();
   else if (name === 'total') loadAllLeads();
   else if (name === 'matched') loadMatched();
@@ -596,7 +598,7 @@ async function pollStatus() {
 
 pollStatus();
 
-loadDealers();
+switchTab(location.hash.replace('#', '') || 'dealers');
 
 // ── Live Logs ─────────────────────────────────────────────────────────────────
 

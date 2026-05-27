@@ -110,7 +110,7 @@ function initSchema(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       candidate_id INTEGER NOT NULL,
       utr_number TEXT NOT NULL,
-      amount INTEGER DEFAULT 1,
+      amount INTEGER DEFAULT 10,
       status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT (datetime('now')),
       verified_at TEXT DEFAULT NULL,

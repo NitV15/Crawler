@@ -70,6 +70,9 @@ async function runJobsCycle(db) {
   jobsCrawlerState.currentCandidate = 'Processing batch';
   const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   const results = await processJobBatch(buffer);
+  if (results.length < buffer.length) {
+    console.warn(`[jobs] Batch returned ${results.length}/${buffer.length} results — some pairs may be unscored`);
+  }
 
   for (let i = 0; i < buffer.length; i++) {
     const result = results.find(r => r.index === i);

@@ -55,7 +55,8 @@
     const dealerId = params.get('dealer_id');
 
     if (!dealerId) {
-      document.body.innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Invalid payment link.</p>';
+      document.getElementById('dealer-name').textContent = 'Dealer';
+      document.getElementById('form').addEventListener('submit', e => { e.preventDefault(); });
     } else {
       fetch('/api/dealers/' + dealerId)
         .then(r => r.json())

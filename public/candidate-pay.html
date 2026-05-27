@@ -55,7 +55,8 @@
     const candidateId = params.get('candidate_id');
 
     if (!candidateId) {
-      document.body.innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Invalid payment link.</p>';
+      document.getElementById('candidate-name').textContent = 'Candidate';
+      document.getElementById('form').addEventListener('submit', e => { e.preventDefault(); });
     } else {
       fetch('/api/candidates/' + candidateId)
         .then(r => r.json())

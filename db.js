@@ -72,6 +72,10 @@ function initSchema(db) {
       subreddit TEXT NOT NULL,
       fetched_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS seen_posts (
+      post_id TEXT PRIMARY KEY,
+      checked_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -228,10 +232,19 @@ function rejectPayment(db, paymentId) {
   db.prepare(`UPDATE payments SET status = 'rejected' WHERE id = ?`).run(paymentId);
 }
 
+function isSeenPost(db, postId) {
+  return !!db.prepare('SELECT post_id FROM seen_posts WHERE post_id = ?').get(postId);
+}
+
+function markPostSeen(db, postId) {
+  db.prepare('INSERT OR IGNORE INTO seen_posts (post_id) VALUES (?)').run(postId);
+}
+
 module.exports = {
   openDb, getActiveDealers, getDealer, addDealer, getDealers, toggleDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getUnmatchedLeads, getAllLeads, assignLead,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   saveFetchedPost, getFetchedPosts,
+  isSeenPost, markPostSeen,
 };

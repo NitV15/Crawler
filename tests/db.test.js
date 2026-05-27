@@ -2,7 +2,8 @@ const { openDb, addDealer, saveLead, getActiveDealers,
         addPayment, getPayments, verifyPayment, rejectPayment,
         getUnmatchedLeads, assignLead,
         incrementDealerLeadCount, resetDealerSubscription,
-        activateDealerSubscription, getDealer } = require('../db');
+        activateDealerSubscription, getDealer,
+        isSeenPost, markPostSeen } = require('../db');
 
 let db;
 const dealer = {
@@ -32,9 +33,24 @@ test('openDb creates payments table', () => {
   expect(tables).toContain('payments');
 });
 
-test('openDb does NOT create seen_posts table', () => {
+test('openDb creates seen_posts table', () => {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
-  expect(tables).not.toContain('seen_posts');
+  expect(tables).toContain('seen_posts');
+});
+
+test('isSeenPost returns false for unknown post', () => {
+  expect(isSeenPost(db, 'unknown_post')).toBe(false);
+});
+
+test('markPostSeen and isSeenPost round-trip', () => {
+  markPostSeen(db, 'reddit_abc123');
+  expect(isSeenPost(db, 'reddit_abc123')).toBe(true);
+});
+
+test('markPostSeen is idempotent', () => {
+  markPostSeen(db, 'reddit_dup');
+  markPostSeen(db, 'reddit_dup');
+  expect(isSeenPost(db, 'reddit_dup')).toBe(true);
 });
 
 test('addDealer stores new fields', () => {

@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "Reddit lead discovery and dealer notification system",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   },
   "main": "server.js",
   "scripts": {
+    "build": "pip install -r requirements.txt || true",
     "start": "node server.js",
     "crawl": "node -e \"require('./crawler').runCrawl()\"",
     "test": "jest --runInBand"

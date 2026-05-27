@@ -10,7 +10,31 @@ const { fetchInstagramLeads } = require('./instagram-fetcher');
 const BATCH_SIZE = 200;
 const CYCLE_WAIT_MS = 2 * 60 * 1000;
 const POST_LIMIT = 25;
-const USER_AGENT = process.env.REDDIT_USER_AGENT || 'crawler-bot/1.0';
+const USER_AGENT = process.env.REDDIT_USER_AGENT || 'web:crawler-bot:1.0 (by /u/crawler_bot)';
+
+let redditToken = null;
+let redditTokenExpiry = 0;
+
+async function getRedditToken() {
+  if (redditToken && Date.now() < redditTokenExpiry - 60000) return redditToken;
+  const clientId = process.env.REDDIT_CLIENT_ID;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  const res = await fetch('https://www.reddit.com/api/v1/access_token', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
+      'User-Agent': USER_AGENT,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+  if (!res.ok) { console.error(`[reddit] Token fetch failed: HTTP ${res.status}`); return null; }
+  const data = await res.json();
+  redditToken = data.access_token;
+  redditTokenExpiry = Date.now() + data.expires_in * 1000;
+  return redditToken;
+}
 
 const crawlerState = {
   running: false,
@@ -41,8 +65,12 @@ function checkSubscription(dealer) {
 }
 
 async function fetchSubredditPosts(subreddit) {
-  const url = `https://www.reddit.com/r/${subreddit}/new.json?limit=${POST_LIMIT}`;
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const token = await getRedditToken();
+  const base = token ? 'https://oauth.reddit.com' : 'https://www.reddit.com';
+  const url = `${base}/r/${subreddit}/new.json?limit=${POST_LIMIT}`;
+  const headers = { 'User-Agent': USER_AGENT };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
   return json.data.children.map(c => ({

@@ -3,23 +3,23 @@ const { getLogs, subscribe } = require('./logger'); // must be first to capture 
 const express = require('express');
 const path = require('path');
 const {
-  openDb, addDealer, getDealers, getLeads, toggleDealer, updateDealer,
+  initSheets, addDealer, getDealers, getLeads, toggleDealer, updateDealer,
   getUnmatchedLeads, getAllLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
-  getFetchedPosts,
+  getFetchedPosts, getFetchedPost, getLead, cleanupOldData,
   addCandidate, getCandidates, getCandidate, toggleCandidate, updateCandidate,
   activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
   saveJobMatch, getJobMatches,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
-} = require('./db');
+} = require('./sheets');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus } = require('./jobs-crawler');
 const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail,
         sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail } = require('./mailer');
 const { identifyLead } = require('./matcher');
 
-function createApp(db) {
+function createApp() {
   const app = express();
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -34,68 +34,68 @@ function createApp(db) {
     res.sendFile(path.join(__dirname, 'public', 'candidate-pay.html'));
   });
 
-  app.post('/api/register', (req, res) => {
+  app.post('/api/register', async (req, res) => {
     const { name, emails, industry_category, services, keywords, state, city, target_customers, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category || !services || !keywords || !state || !city) {
       return res.status(400).json({ error: 'Required: name, emails, industry_category, services, keywords, state, city' });
     }
     try {
-      addDealer(db, { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
+      await addDealer({ name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to register dealer' });
     }
   });
 
-  app.get('/api/dealers', (req, res) => {
-    try { res.json(getDealers(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch dealers' }); }
+  app.get('/api/dealers', async (req, res) => {
+    try { res.json(await getDealers()); } catch (err) { res.status(500).json({ error: 'Failed to fetch dealers' }); }
   });
 
-  app.get('/api/leads', (req, res) => {
-    try { res.json(getLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
+  app.get('/api/leads', async (req, res) => {
+    try { res.json(await getLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
-  app.get('/api/leads/all', (req, res) => {
-    try { res.json(getAllLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
+  app.get('/api/leads/all', async (req, res) => {
+    try { res.json(await getAllLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
-  app.get('/api/leads/unmatched', (req, res) => {
-    try { res.json(getUnmatchedLeads(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch unmatched leads' }); }
+  app.get('/api/leads/unmatched', async (req, res) => {
+    try { res.json(await getUnmatchedLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch unmatched leads' }); }
   });
 
-  app.post('/api/dealers/:id/toggle', (req, res) => {
+  app.post('/api/dealers/:id/toggle', async (req, res) => {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
     try {
-      toggleDealer(db, parseInt(req.params.id), req.body.active);
+      await toggleDealer(parseInt(req.params.id), req.body.active);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });
     }
   });
 
-  app.put('/api/dealers/:id', (req, res) => {
+  app.put('/api/dealers/:id', async (req, res) => {
     const { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category) return res.status(400).json({ error: 'name, emails, industry_category required' });
     try {
-      updateDealer(db, parseInt(req.params.id), { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
+      await updateDealer(parseInt(req.params.id), { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });
     }
   });
 
-  app.post('/api/dealers/:id/activate-subscription', (req, res) => {
+  app.post('/api/dealers/:id/activate-subscription', async (req, res) => {
     try {
-      activateDealerSubscription(db, parseInt(req.params.id));
+      await activateDealerSubscription(parseInt(req.params.id));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to activate subscription' });
     }
   });
 
-  app.post('/api/dealers/:id/reset-subscription', (req, res) => {
+  app.post('/api/dealers/:id/reset-subscription', async (req, res) => {
     try {
-      resetDealerSubscription(db, parseInt(req.params.id));
+      await resetDealerSubscription(parseInt(req.params.id));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to reset subscription' });
@@ -103,7 +103,7 @@ function createApp(db) {
   });
 
   app.post('/api/crawl/start', (req, res) => {
-    startCrawler(db).catch(err => console.error('[server] Crawler error:', err.message));
+    startCrawler().catch(err => console.error('[server] Crawler error:', err.message));
     res.json({ success: true });
   });
 
@@ -120,35 +120,35 @@ function createApp(db) {
     res.sendFile(path.join(__dirname, 'public', 'pay.html'));
   });
 
-  app.get('/api/dealers/:id', (req, res) => {
-    const dealer = getDealer(db, parseInt(req.params.id));
+  app.get('/api/dealers/:id', async (req, res) => {
+    const dealer = await getDealer(parseInt(req.params.id));
     if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
     res.json(dealer);
   });
 
-  app.post('/api/payments', (req, res) => {
+  app.post('/api/payments', async (req, res) => {
     const { dealer_id, utr_number } = req.body;
     if (!dealer_id || !utr_number) return res.status(400).json({ error: 'dealer_id and utr_number required' });
     try {
-      addPayment(db, { dealerId: parseInt(dealer_id), utrNumber: utr_number });
+      await addPayment({ dealerId: parseInt(dealer_id), utrNumber: utr_number });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to submit payment' });
     }
   });
 
-  app.get('/api/payments', (req, res) => {
-    try { res.json(getPayments(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
+  app.get('/api/payments', async (req, res) => {
+    try { res.json(await getPayments()); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
   });
 
   app.post('/api/payments/:id/verify', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = getPayment(db, payId);
+      const payment = await getPayment(payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
-      verifyPayment(db, payId);
-      activateDealerSubscription(db, payment.dealer_id);
-      const dealer = getDealer(db, payment.dealer_id);
+      await verifyPayment(payId);
+      await activateDealerSubscription(payment.dealer_id);
+      const dealer = await getDealer(payment.dealer_id);
       if (dealer) await sendSubscriptionConfirmationEmail(dealer);
       res.json({ success: true });
     } catch (err) {
@@ -159,10 +159,10 @@ function createApp(db) {
   app.post('/api/payments/:id/reject', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = getPayment(db, payId);
+      const payment = await getPayment(payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
-      rejectPayment(db, payId);
-      const dealer = getDealer(db, payment.dealer_id);
+      await rejectPayment(payId);
+      const dealer = await getDealer(payment.dealer_id);
       if (dealer) await sendPaymentRejectedEmail(dealer);
       res.json({ success: true });
     } catch (err) {
@@ -170,29 +170,26 @@ function createApp(db) {
     }
   });
 
-  app.post('/api/admin/cleanup', (req, res) => {
+  app.post('/api/admin/cleanup', async (req, res) => {
     try {
-      const r1 = db.prepare(`DELETE FROM seen_posts WHERE checked_at < datetime('now', '-5 days')`).run();
-      const r2 = db.prepare(`DELETE FROM fetched_posts WHERE fetched_at < datetime('now', '-60 days')`).run();
-      const r3 = db.prepare(`DELETE FROM leads WHERE status = 'unmatched' AND emailed_at < datetime('now', '-90 days')`).run();
-      db.prepare('VACUUM').run();
-      res.json({ deleted_seen: r1.changes, deleted_fetched: r2.changes, deleted_unmatched: r3.changes });
+      const result = await cleanupOldData();
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.get('/api/fetched-posts', (req, res) => {
-    try { res.json(getFetchedPosts(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
+  app.get('/api/fetched-posts', async (req, res) => {
+    try { res.json(await getFetchedPosts()); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
   });
 
   app.post('/api/fetched-posts/:id/send', async (req, res) => {
     const { dealer_id } = req.body;
     if (!dealer_id) return res.status(400).json({ error: 'dealer_id required' });
     try {
-      const post = db.prepare('SELECT * FROM fetched_posts WHERE id = ?').get(parseInt(req.params.id));
+      const post = await getFetchedPost(parseInt(req.params.id));
       if (!post) return res.status(404).json({ error: 'Post not found' });
-      const dealer = getDealer(db, parseInt(dealer_id));
+      const dealer = await getDealer(parseInt(dealer_id));
       if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
 
       // Run Gemini to get suggested reply and lead details
@@ -202,7 +199,7 @@ function createApp(db) {
         if (gemini.is_lead) leadInfo = gemini;
       } catch (e) { /* send without AI if Gemini fails */ }
 
-      saveLead(db, {
+      await saveLead({
         dealerId: dealer.id, redditPostId: post.post_id,
         postTitle: post.post_title, postText: post.post_text,
         postUrl: post.post_url, subreddit: post.subreddit,
@@ -223,7 +220,7 @@ function createApp(db) {
         includeSubscribeFooter: action === 'send_with_footer',
         paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
       });
-      incrementDealerLeadCount(db, dealer.id);
+      await incrementDealerLeadCount(dealer.id);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -252,7 +249,7 @@ function createApp(db) {
     const { dealer_id } = req.body;
     if (!dealer_id) return res.status(400).json({ error: 'dealer_id required' });
     try {
-      assignLead(db, leadId, parseInt(dealer_id));
+      await assignLead(leadId, parseInt(dealer_id));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to assign lead' });
@@ -266,21 +263,21 @@ function createApp(db) {
       return res.status(400).json({ error: 'dealer_ids array required' });
     }
     try {
-      const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
+      const lead = await getLead(leadId);
       if (!lead) return res.status(404).json({ error: 'Lead not found' });
       const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
       const errors = [];
       console.log(`[admin] Manual assign lead #${leadId} "${(lead.post_title||'').slice(0,50)}" → ${dealer_ids.length} dealer(s)`);
       for (const rawId of dealer_ids) {
         const dealerId = parseInt(rawId);
-        const dealer = getDealer(db, dealerId);
+        const dealer = await getDealer(dealerId);
         if (!dealer) {
           const msg = `Dealer ${dealerId} not found`;
           console.warn(`[admin] ${msg}`);
           errors.push(msg);
           continue;
         }
-        saveLead(db, {
+        await saveLead({
           dealerId,
           redditPostId: lead.reddit_post_id + '_assign' + dealerId,
           postTitle: lead.post_title,
@@ -304,7 +301,7 @@ function createApp(db) {
             includeSubscribeFooter: !isActive,
             paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
           });
-          incrementDealerLeadCount(db, dealer.id);
+          await incrementDealerLeadCount(dealer.id);
           console.log(`[admin] ✓ email sent → ${dealer.name} (${dealer.emails})${!isActive ? ' [subscribe footer included]' : ''}`);
         } catch (e) {
           const msg = `Email failed for ${dealer.name}: ${e.message}`;
@@ -312,7 +309,7 @@ function createApp(db) {
           errors.push(msg);
         }
       }
-      assignLead(db, leadId, parseInt(dealer_ids[0]));
+      await assignLead(leadId, parseInt(dealer_ids[0]));
       console.log(`[admin] Lead #${leadId} marked assigned`);
       res.json({ success: true, errors: errors.length ? errors : undefined });
     } catch (err) {
@@ -323,62 +320,62 @@ function createApp(db) {
 
   // ── Candidates ────────────────────────────────────────────────────────────────
 
-  app.post('/api/candidates/register', (req, res) => {
+  app.post('/api/candidates/register', async (req, res) => {
     const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
     if (!name || !emails || !role || !skills || !city) {
       return res.status(400).json({ error: 'Required: name, emails, role, skills, city' });
     }
     try {
-      addCandidate(db, { name, emails, role, skills, experience_level, city, state, preferred_locations });
+      await addCandidate({ name, emails, role, skills, experience_level, city, state, preferred_locations });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to register candidate' });
     }
   });
 
-  app.get('/api/candidates', (req, res) => {
-    try { res.json(getCandidates(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch candidates' }); }
+  app.get('/api/candidates', async (req, res) => {
+    try { res.json(await getCandidates()); } catch (err) { res.status(500).json({ error: 'Failed to fetch candidates' }); }
   });
 
-  app.get('/api/candidates/:id', (req, res) => {
-    const c = getCandidate(db, parseInt(req.params.id));
+  app.get('/api/candidates/:id', async (req, res) => {
+    const c = await getCandidate(parseInt(req.params.id));
     if (!c) return res.status(404).json({ error: 'Candidate not found' });
     res.json(c);
   });
 
-  app.put('/api/candidates/:id', (req, res) => {
+  app.put('/api/candidates/:id', async (req, res) => {
     const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
     if (!name || !emails || !role) return res.status(400).json({ error: 'name, emails, role required' });
     try {
-      updateCandidate(db, parseInt(req.params.id), { name, emails, role, skills, experience_level, city, state, preferred_locations });
+      await updateCandidate(parseInt(req.params.id), { name, emails, role, skills, experience_level, city, state, preferred_locations });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update candidate' });
     }
   });
 
-  app.post('/api/candidates/:id/toggle', (req, res) => {
+  app.post('/api/candidates/:id/toggle', async (req, res) => {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
     try {
-      toggleCandidate(db, parseInt(req.params.id), req.body.active);
+      await toggleCandidate(parseInt(req.params.id), req.body.active);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update candidate' });
     }
   });
 
-  app.post('/api/candidates/:id/activate-subscription', (req, res) => {
+  app.post('/api/candidates/:id/activate-subscription', async (req, res) => {
     try {
-      activateCandidateSubscription(db, parseInt(req.params.id));
+      await activateCandidateSubscription(parseInt(req.params.id));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to activate subscription' });
     }
   });
 
-  app.post('/api/candidates/:id/reset-subscription', (req, res) => {
+  app.post('/api/candidates/:id/reset-subscription', async (req, res) => {
     try {
-      resetCandidateSubscription(db, parseInt(req.params.id));
+      await resetCandidateSubscription(parseInt(req.params.id));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to reset subscription' });
@@ -387,35 +384,35 @@ function createApp(db) {
 
   // ── Job Matches ───────────────────────────────────────────────────────────────
 
-  app.get('/api/job-matches', (req, res) => {
-    try { res.json(getJobMatches(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
+  app.get('/api/job-matches', async (req, res) => {
+    try { res.json(await getJobMatches()); } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
   });
 
   // ── Candidate Payments ────────────────────────────────────────────────────────
 
-  app.post('/api/candidate-payments', (req, res) => {
+  app.post('/api/candidate-payments', async (req, res) => {
     const { candidate_id, utr_number } = req.body;
     if (!candidate_id || !utr_number) return res.status(400).json({ error: 'candidate_id and utr_number required' });
     try {
-      addCandidatePayment(db, { candidateId: parseInt(candidate_id), utrNumber: utr_number });
+      await addCandidatePayment({ candidateId: parseInt(candidate_id), utrNumber: utr_number });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to submit payment' });
     }
   });
 
-  app.get('/api/candidate-payments', (req, res) => {
-    try { res.json(getCandidatePayments(db)); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
+  app.get('/api/candidate-payments', async (req, res) => {
+    try { res.json(await getCandidatePayments()); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
   });
 
   app.post('/api/candidate-payments/:id/verify', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = getCandidatePayment(db, payId);
+      const payment = await getCandidatePayment(payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
-      verifyCandidatePayment(db, payId);
-      activateCandidateSubscription(db, payment.candidate_id);
-      const candidate = getCandidate(db, payment.candidate_id);
+      await verifyCandidatePayment(payId);
+      await activateCandidateSubscription(payment.candidate_id);
+      const candidate = await getCandidate(payment.candidate_id);
       if (candidate) await sendCandidateSubscriptionConfirmationEmail(candidate);
       res.json({ success: true });
     } catch (err) {
@@ -426,10 +423,10 @@ function createApp(db) {
   app.post('/api/candidate-payments/:id/reject', async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
-      const payment = getCandidatePayment(db, payId);
+      const payment = await getCandidatePayment(payId);
       if (!payment) return res.status(404).json({ error: 'Payment not found' });
-      rejectCandidatePayment(db, payId);
-      const candidate = getCandidate(db, payment.candidate_id);
+      await rejectCandidatePayment(payId);
+      const candidate = await getCandidate(payment.candidate_id);
       if (candidate) await sendCandidatePaymentRejectedEmail(candidate);
       res.json({ success: true });
     } catch (err) {
@@ -440,7 +437,7 @@ function createApp(db) {
   // ── Jobs Crawler ──────────────────────────────────────────────────────────────
 
   app.post('/api/jobs/start', (req, res) => {
-    startJobsCrawler(db).catch(err => console.error('[server] Jobs crawler error:', err.message));
+    startJobsCrawler().catch(err => console.error('[server] Jobs crawler error:', err.message));
     res.json({ success: true });
   });
 
@@ -457,12 +454,14 @@ function createApp(db) {
 }
 
 if (require.main === module) {
-  const db = openDb();
-  const app = createApp(db);
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`[server] Running at http://localhost:${PORT}`);
-  });
+  (async () => {
+    await initSheets();
+    const app = createApp();
+    app.listen(PORT, () => {
+      console.log(`[server] Running at http://localhost:${PORT}`);
+    });
+  })();
 }
 
 module.exports = { createApp };

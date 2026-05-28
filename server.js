@@ -121,9 +121,13 @@ function createApp() {
   });
 
   app.get('/api/dealers/:id', async (req, res) => {
-    const dealer = await getDealer(parseInt(req.params.id));
-    if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
-    res.json(dealer);
+    try {
+      const dealer = await getDealer(parseInt(req.params.id));
+      if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
+      res.json(dealer);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch dealer' });
+    }
   });
 
   app.post('/api/payments', async (req, res) => {
@@ -338,9 +342,13 @@ function createApp() {
   });
 
   app.get('/api/candidates/:id', async (req, res) => {
-    const c = await getCandidate(parseInt(req.params.id));
-    if (!c) return res.status(404).json({ error: 'Candidate not found' });
-    res.json(c);
+    try {
+      const c = await getCandidate(parseInt(req.params.id));
+      if (!c) return res.status(404).json({ error: 'Candidate not found' });
+      res.json(c);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch candidate' });
+    }
   });
 
   app.put('/api/candidates/:id', async (req, res) => {

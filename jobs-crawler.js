@@ -55,7 +55,7 @@ async function runJobsCycle() {
         .filter((v, i, a) => v && a.indexOf(v) === i);
       let jobs = [];
       for (const loc of locations) {
-        const fetched = await fetchIndeedJobs(candidate.role, candidate.skills, loc === 'Remote' ? '' : loc);
+        const fetched = await fetchIndeedJobs(candidate.role, '', loc === 'Remote' ? '' : loc);
         jobs.push(...fetched);
       }
       const seenIds = new Set();

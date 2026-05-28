@@ -27,7 +27,7 @@ async function readSheet(name) {
 async function appendRow(name, obj) {
   const headers = COLS[name];
   const existing = await readSheet(name);
-  const id = existing.length + 1;
+  const id = existing.length + 1; // non-atomic: concurrent writes can produce duplicate IDs
   const row = { id: String(id), ...obj };
   await sheets.spreadsheets.values.append({
     spreadsheetId, range: name, valueInputOption: 'RAW',

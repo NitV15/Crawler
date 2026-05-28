@@ -978,6 +978,50 @@ async function saveDealer() {
     btn.textContent = 'Save';
   }
 }
+
+// ── Animations ────────────────────────────────────────────────────────────────
+
+function initPageAnimations() {
+  anime({ targets: 'header', translateY: [-60, 0], opacity: [0, 1], duration: 600, easing: 'easeOutCubic' });
+  anime({ targets: '.sidebar', translateX: [-30, 0], opacity: [0, 1], duration: 500, delay: 150, easing: 'easeOutCubic' });
+}
+
+function animatePanel(el) {
+  anime({ targets: el, translateX: [30, 0], opacity: [0, 1], duration: 350, easing: 'spring(1, 80, 10, 0)' });
+}
+
+function animateTableRows(container) {
+  const rows = container.querySelectorAll('tbody tr');
+  if (!rows.length) return;
+  anime({ targets: rows, translateY: [12, 0], opacity: [0, 1], duration: 300, delay: anime.stagger(40), easing: 'easeOutQuart' });
+}
+
+function openModalAnimated(overlayId) {
+  const overlay = document.getElementById(overlayId);
+  overlay.classList.add('open');
+  anime({ targets: overlay.querySelector('.modal-box'), scale: [0.85, 1], opacity: [0, 1], duration: 400, easing: 'spring(1, 80, 10, 0)' });
+}
+
+function closeModalAnimated(overlayId, callback) {
+  const overlay = document.getElementById(overlayId);
+  anime({
+    targets: overlay.querySelector('.modal-box'),
+    scale: [1, 0.9], opacity: [1, 0], duration: 150, easing: 'easeInCubic',
+    complete: () => { overlay.classList.remove('open'); if (callback) callback(); }
+  });
+}
+
+let crawlerGlowAnim = null;
+function startCrawlerGlow() {
+  const el = document.getElementById('crawlerStatus');
+  if (!el || crawlerGlowAnim) return;
+  crawlerGlowAnim = anime({ targets: el, textShadow: ['0 0 0px rgba(102,126,234,0)', '0 0 12px rgba(102,126,234,0.9)'], duration: 1000, easing: 'easeInOutSine', direction: 'alternate', loop: true });
+}
+function stopCrawlerGlow() {
+  if (crawlerGlowAnim) { crawlerGlowAnim.pause(); crawlerGlowAnim = null; }
+  const el = document.getElementById('crawlerStatus');
+  if (el) el.style.textShadow = '';
+}
 </script>
 
 <!-- Edit Dealer Modal -->

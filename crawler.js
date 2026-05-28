@@ -1,6 +1,6 @@
 require('dotenv').config();
-const { openDb, getActiveDealers, getDealer, saveLead, incrementDealerLeadCount,
-        resetDealerSubscription, saveFetchedPost, isSeenPost, markPostSeen } = require('./db');
+const { getActiveDealers, getDealer, saveLead, incrementDealerLeadCount,
+        resetDealerSubscription, saveFetchedPost, isSeenPost, markPostSeen } = require('./sheets');
 const { shouldCheckPost } = require('./prefilter');
 const { buildSubredditList } = require('./subreddits');
 const { processPostBatch } = require('./matcher');
@@ -59,8 +59,8 @@ function checkSubscription(dealer) {
     if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
     return 'expired';
   }
-  if (lead_count < 2) return 'send';
-  if (lead_count === 2) return 'send_with_footer';
+  if (parseInt(lead_count) < 2) return 'send';
+  if (parseInt(lead_count) === 2) return 'send_with_footer';
   return 'skip';
 }
 
@@ -84,8 +84,8 @@ async function fetchSubredditPosts(subreddit) {
   }));
 }
 
-async function processBatch(buffer, db) {
-  const dealers = getActiveDealers(db);
+async function processBatch(buffer) {
+  const dealers = await getActiveDealers();
   if (!dealers.length) return;
 
   const filtered = buffer.filter(p => shouldCheckPost({ title: p.title, text: p.text }, dealers));
@@ -105,7 +105,7 @@ async function processBatch(buffer, db) {
     const matchedIds = result.matched_dealer_ids || [];
 
     if (!matchedIds.length) {
-      saveLead(db, {
+      await saveLead({
         dealerId: null, redditPostId: post.post_id, postTitle: post.title,
         postText: post.text.slice(0, 500), postUrl: post.url, subreddit: post.subreddit,
         matchReason: null, suggestedReply: result.suggested_reply,
@@ -116,14 +116,14 @@ async function processBatch(buffer, db) {
     }
 
     for (const dealerId of matchedIds) {
-      const dealer = getDealer(db, dealerId);
+      const dealer = await getDealer(dealerId);
       if (!dealer) continue;
 
       const action = checkSubscription(dealer);
 
       if (action === 'expired') {
-        resetDealerSubscription(db, dealerId);
-        saveLead(db, {
+        await resetDealerSubscription(dealerId);
+        await saveLead({
           dealerId: null, redditPostId: post.post_id, postTitle: post.title,
           postText: post.text.slice(0, 500), postUrl: post.url, subreddit: post.subreddit,
           matchReason: null, suggestedReply: result.suggested_reply,
@@ -134,7 +134,7 @@ async function processBatch(buffer, db) {
       }
 
       if (action === 'skip') {
-        saveLead(db, {
+        await saveLead({
           dealerId: null, redditPostId: post.post_id, postTitle: post.title,
           postText: post.text.slice(0, 500), postUrl: post.url, subreddit: post.subreddit,
           matchReason: null, suggestedReply: result.suggested_reply,
@@ -144,7 +144,7 @@ async function processBatch(buffer, db) {
         continue;
       }
 
-      saveLead(db, {
+      await saveLead({
         dealerId: dealer.id, redditPostId: post.post_id, postTitle: post.title,
         postText: post.text.slice(0, 500), postUrl: post.url, subreddit: post.subreddit,
         matchReason: `Category: ${result.lead_category}`, suggestedReply: result.suggested_reply,
@@ -160,7 +160,7 @@ async function processBatch(buffer, db) {
         paymentLink: `${BASE_URL}/pay?dealer_id=${dealer.id}`,
       });
 
-      incrementDealerLeadCount(db, dealer.id);
+      await incrementDealerLeadCount(dealer.id);
       crawlerState.emailsSent++;
       console.log(`[crawler] ✓ ${dealer.name} | ${result.what_to_sell}`);
     }
@@ -169,8 +169,8 @@ async function processBatch(buffer, db) {
   crawlerState.lastBatchAt = new Date().toISOString();
 }
 
-async function runCycle(db) {
-  const dealers = getActiveDealers(db);
+async function runCycle() {
+  const dealers = await getActiveDealers();
   if (!dealers.length) {
     crawlerState.currentSource = 'Waiting - no dealers';
     return;
@@ -189,12 +189,12 @@ async function runCycle(db) {
       for (const post of posts) {
         if (post.created_utc < fiveDaysAgo) continue;
         if (seenThisCycle.has(post.post_id)) continue;
-        if (isSeenPost(db, post.post_id)) continue;
+        if (isSeenPost(post.post_id)) continue;
         seenThisCycle.add(post.post_id);
-        markPostSeen(db, post.post_id);
+        markPostSeen(post.post_id);
         buffer.push(post);
         crawlerState.postsCollected++;
-        saveFetchedPost(db, { postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: post.subreddit });
+        await saveFetchedPost({ postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: post.subreddit });
       }
     } catch (err) {
       console.error(`[crawler] r/${sub} failed: ${err.message}`);
@@ -217,12 +217,12 @@ async function runCycle(db) {
         };
         if (post.created_utc < fiveDaysAgo) continue;
         if (seenThisCycle.has(post.post_id)) continue;
-        if (isSeenPost(db, post.post_id)) continue;
+        if (isSeenPost(post.post_id)) continue;
         seenThisCycle.add(post.post_id);
-        markPostSeen(db, post.post_id);
+        markPostSeen(post.post_id);
         buffer.push(post);
         crawlerState.postsCollected++;
-        saveFetchedPost(db, { postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: 'instagram' });
+        await saveFetchedPost({ postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: 'instagram' });
       }
     } catch (err) {
       console.error(`[crawler] Instagram failed: ${err.message}`);
@@ -230,13 +230,12 @@ async function runCycle(db) {
   }
 
   if (crawlerState.running) {
-    await processBatch(buffer, db);
+    await processBatch(buffer);
   }
 }
 
-async function startCrawler(db) {
+async function startCrawler() {
   if (crawlerState.running) return;
-  const resolvedDb = db || openDb();
   crawlerState.running = true;
   crawlerState.postsCollected = 0;
   crawlerState.leadsFound = 0;
@@ -246,7 +245,7 @@ async function startCrawler(db) {
   console.log('[crawler] Starting continuous loop...');
   while (crawlerState.running) {
     try {
-      await runCycle(resolvedDb);
+      await runCycle();
     } catch (err) {
       console.error('[crawler] Cycle error:', err.message);
     }

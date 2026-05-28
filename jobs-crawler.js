@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { getActiveCandidates, getCandidate, saveJobMatch, incrementCandidateLeadCount,
-        resetCandidateSubscription, isSeenJob, markJobSeen } = require('./db');
+        resetCandidateSubscription, isSeenJob, markJobSeen } = require('./sheets');
 const { fetchIndeedJobs } = require('./indeed-fetcher');
 const { processJobBatch } = require('./job-matcher');
 const { sendJobAlertEmail } = require('./mailer');
@@ -30,13 +30,13 @@ function checkCandidateSubscription(candidate) {
     if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
     return 'expired';
   }
-  if (lead_count < 1) return 'send';
-  if (lead_count === 1) return 'send_with_footer';
+  if (parseInt(lead_count) < 1) return 'send';
+  if (parseInt(lead_count) === 1) return 'send_with_footer';
   return 'skip';
 }
 
-async function runJobsCycle(db) {
-  const candidates = getActiveCandidates(db);
+async function runJobsCycle() {
+  const candidates = await getActiveCandidates();
   if (!candidates.length) {
     jobsCrawlerState.currentCandidate = 'Waiting - no candidates';
     return;
@@ -54,9 +54,9 @@ async function runJobsCycle(db) {
       for (const job of jobs) {
         if (job.created_utc < threeDaysAgo) continue;
         if (seenThisCycle.has(job.job_id)) continue;
-        if (isSeenJob(db, job.job_id)) continue;
+        if (isSeenJob(job.job_id)) continue;
         seenThisCycle.add(job.job_id);
-        markJobSeen(db, job.job_id);
+        markJobSeen(job.job_id);
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
       }
@@ -79,14 +79,14 @@ async function runJobsCycle(db) {
     if (!result || !result.is_relevant) continue;
 
     const { candidate, job } = buffer[i];
-    const freshCandidate = getCandidate(db, candidate.id);
+    const freshCandidate = await getCandidate(candidate.id);
     if (!freshCandidate) continue;
 
     const action = checkCandidateSubscription(freshCandidate);
-    if (action === 'expired') { resetCandidateSubscription(db, freshCandidate.id); continue; }
+    if (action === 'expired') { await resetCandidateSubscription(freshCandidate.id); continue; }
     if (action === 'skip') continue;
 
-    saveJobMatch(db, {
+    await saveJobMatch({
       candidateId: freshCandidate.id, indeedJobId: job.job_id,
       jobTitle: job.title, company: job.company, location: job.location,
       jobUrl: job.url, snippet: job.snippet, suggestedTip: result.suggested_tip, status: 'matched',
@@ -101,7 +101,7 @@ async function runJobsCycle(db) {
       paymentLink: `${BASE_URL}/candidate-pay?candidate_id=${freshCandidate.id}`,
     });
 
-    incrementCandidateLeadCount(db, freshCandidate.id);
+    await incrementCandidateLeadCount(freshCandidate.id);
     jobsCrawlerState.matchesFound++;
     jobsCrawlerState.emailsSent++;
     console.log(`[jobs] ✓ ${freshCandidate.name} | ${job.title} at ${job.company}`);
@@ -110,7 +110,7 @@ async function runJobsCycle(db) {
   jobsCrawlerState.lastBatchAt = new Date().toISOString();
 }
 
-async function startJobsCrawler(db) {
+async function startJobsCrawler() {
   if (jobsCrawlerState.running) return;
   jobsCrawlerState.running = true;
   jobsCrawlerState.jobsCollected = 0;
@@ -121,7 +121,7 @@ async function startJobsCrawler(db) {
   console.log('[jobs] Starting continuous loop...');
   while (jobsCrawlerState.running) {
     try {
-      await runJobsCycle(db);
+      await runJobsCycle();
     } catch (err) {
       console.error('[jobs] Cycle error:', err.message);
     }

@@ -30,8 +30,9 @@ function checkCandidateSubscription(candidate) {
     if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
     return 'expired';
   }
-  if (parseInt(lead_count) < 1) return 'send';
-  if (parseInt(lead_count) === 1) return 'send_with_footer';
+  const count = parseInt(lead_count);
+  if (count < 1) return 'send';
+  if (count === 1) return 'send_with_footer';
   return 'skip';
 }
 
@@ -56,7 +57,6 @@ async function runJobsCycle() {
         if (seenThisCycle.has(job.job_id)) continue;
         if (isSeenJob(job.job_id)) continue;
         seenThisCycle.add(job.job_id);
-        markJobSeen(job.job_id);
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
       }

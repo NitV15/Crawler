@@ -59,8 +59,9 @@ function checkSubscription(dealer) {
     if (!subscription_expires_at || new Date(subscription_expires_at) > new Date()) return 'send';
     return 'expired';
   }
-  if (parseInt(lead_count) < 2) return 'send';
-  if (parseInt(lead_count) === 2) return 'send_with_footer';
+  const count = parseInt(lead_count);
+  if (count < 2) return 'send';
+  if (count === 2) return 'send_with_footer';
   return 'skip';
 }
 
@@ -191,7 +192,6 @@ async function runCycle() {
         if (seenThisCycle.has(post.post_id)) continue;
         if (isSeenPost(post.post_id)) continue;
         seenThisCycle.add(post.post_id);
-        markPostSeen(post.post_id);
         buffer.push(post);
         crawlerState.postsCollected++;
         await saveFetchedPost({ postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: post.subreddit });
@@ -219,7 +219,6 @@ async function runCycle() {
         if (seenThisCycle.has(post.post_id)) continue;
         if (isSeenPost(post.post_id)) continue;
         seenThisCycle.add(post.post_id);
-        markPostSeen(post.post_id);
         buffer.push(post);
         crawlerState.postsCollected++;
         await saveFetchedPost({ postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: 'instagram' });

@@ -49,6 +49,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockValuesGet.mockReset();
+  mockValuesAppend.mockReset();
+  mockValuesUpdate.mockReset();
+  mockSpreadsheetsBatchUpdate.mockReset();
+  mockSpreadsheetsGet.mockReset();
   mockValuesAppend.mockResolvedValue({ data: {} });
   mockValuesUpdate.mockResolvedValue({ data: {} });
 });
@@ -134,15 +138,16 @@ test('getLeads joins dealer_name and filters matched/assigned', async () => {
   mockValuesGet
     .mockResolvedValueOnce(mockSheet(LEAD_HEADERS, [
       ['1','1','post1','T1','','http://x.com','india','','','','','','matched','2026-01-01'],
-      ['2','','post2','T2','','http://y.com','india','','','','','','unmatched','2026-01-01'],
+      ['2','1','post2','T2','','http://y.com','india','','','','','','assigned','2026-01-01'],
+      ['3','','post3','T3','','http://z.com','india','','','','','','unmatched','2026-01-01'],
     ]))
     .mockResolvedValueOnce(mockSheet(DEALER_HEADERS, [
       ['1','Alpha Co','a@a.com','','','','','','','','','','','0','free','','1','2026-01-01'],
     ]));
   const leads = await sheets.getLeads();
-  expect(leads).toHaveLength(1);
+  expect(leads).toHaveLength(2);
+  expect(leads.every(l => l.status === 'matched' || l.status === 'assigned')).toBe(true);
   expect(leads[0].dealer_name).toBe('Alpha Co');
-  expect(leads[0].status).toBe('matched');
 });
 
 test('getUnmatchedLeads returns only unmatched', async () => {
@@ -155,21 +160,29 @@ test('getUnmatchedLeads returns only unmatched', async () => {
   expect(leads[0].status).toBe('unmatched');
 });
 
+test('assignLead updates dealer_id and status to assigned', async () => {
+  mockValuesGet.mockResolvedValue(mockSheet(LEAD_HEADERS, [
+    ['1','','post1','T1','','http://x.com','india','','','','','','unmatched','2026-01-01'],
+  ]));
+  await sheets.assignLead(1, 5);
+  const updatedRow = mockValuesUpdate.mock.calls[0][0].requestBody.values[0];
+  expect(updatedRow[1]).toBe('5');      // dealer_id at index 1
+  expect(updatedRow[12]).toBe('assigned'); // status at index 12
+});
+
 // ─── Seen Posts ─────────────────────────────────────────────────────────────────
 
 test('isSeenPost returns false for unknown post', () => {
   expect(sheets.isSeenPost('brand_new_post')).toBe(false);
 });
 
-test('saveFetchedPost adds post to seenPosts and calls appendRow', async () => {
+test('saveFetchedPost adds post to seenPosts and is idempotent', async () => {
   mockValuesGet.mockResolvedValue(mockSheet(FETCHED_HEADERS));
-  await sheets.saveFetchedPost({ postId: 'unique_post_xyz', postTitle: 'Title', postText: 'Body', postUrl: 'http://r.com', subreddit: 'india' });
+  await sheets.saveFetchedPost({ postId: 'idempotent_test_post', postTitle: 'Title', postText: 'Body', postUrl: 'http://r.com', subreddit: 'india' });
   expect(mockValuesAppend).toHaveBeenCalledTimes(1);
-  expect(sheets.isSeenPost('unique_post_xyz')).toBe(true);
-});
-
-test('saveFetchedPost is idempotent for already-seen posts', async () => {
-  await sheets.saveFetchedPost({ postId: 'unique_post_xyz', postTitle: 'Title', postText: 'Body', postUrl: 'http://r.com', subreddit: 'india' });
+  expect(sheets.isSeenPost('idempotent_test_post')).toBe(true);
+  mockValuesAppend.mockClear();
+  await sheets.saveFetchedPost({ postId: 'idempotent_test_post', postTitle: 'Title', postText: 'Body', postUrl: 'http://r.com', subreddit: 'india' });
   expect(mockValuesAppend).not.toHaveBeenCalled();
 });
 
@@ -227,6 +240,45 @@ test('getActiveCandidates filters by active=1', async () => {
   const candidates = await sheets.getActiveCandidates();
   expect(candidates).toHaveLength(1);
   expect(candidates[0].name).toBe('John');
+});
+
+test('incrementCandidateLeadCount increments lead_count', async () => {
+  mockValuesGet.mockResolvedValue(mockSheet(CANDIDATE_HEADERS, [
+    ['1','John','j@j.com','Dev','JS','Mid','Delhi','Delhi','','3','free','','1','2026-01-01'],
+  ]));
+  await sheets.incrementCandidateLeadCount(1);
+  const updatedRow = mockValuesUpdate.mock.calls[0][0].requestBody.values[0];
+  expect(updatedRow[9]).toBe('4'); // lead_count at index 9
+});
+
+test('activateCandidateSubscription sets status and resets lead_count', async () => {
+  mockValuesGet.mockResolvedValue(mockSheet(CANDIDATE_HEADERS, [
+    ['1','John','j@j.com','Dev','JS','Mid','Delhi','Delhi','','5','free','','1','2026-01-01'],
+  ]));
+  await sheets.activateCandidateSubscription(1);
+  const updatedRow = mockValuesUpdate.mock.calls[0][0].requestBody.values[0];
+  expect(updatedRow[10]).toBe('active'); // subscription_status at index 10
+  expect(updatedRow[9]).toBe('0');       // lead_count at index 9
+  expect(updatedRow[11]).toBeTruthy();   // subscription_expires_at at index 11
+});
+
+test('addCandidatePayment appends row with pending status', async () => {
+  mockValuesGet.mockResolvedValue(mockSheet(CAND_PAY_HEADERS));
+  await sheets.addCandidatePayment({ candidateId: 1, utrNumber: 'UTR789' });
+  const row = mockValuesAppend.mock.calls[0][0].requestBody.values[0];
+  expect(row[1]).toBe('1');       // candidate_id
+  expect(row[2]).toBe('UTR789');  // utr_number
+  expect(row[4]).toBe('pending'); // status
+});
+
+test('verifyCandidatePayment updates status and verified_at', async () => {
+  mockValuesGet.mockResolvedValue(mockSheet(CAND_PAY_HEADERS, [
+    ['1','1','UTR789','10','pending','2026-01-01',''],
+  ]));
+  await sheets.verifyCandidatePayment(1);
+  const updatedRow = mockValuesUpdate.mock.calls[0][0].requestBody.values[0];
+  expect(updatedRow[4]).toBe('verified');
+  expect(updatedRow[6]).toBeTruthy(); // verified_at
 });
 
 // ─── Job Matches ───────────────────────────────────────────────────────────────

@@ -228,7 +228,9 @@ function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'dealers';
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('panel-' + name).classList.add('active');
+  const panel = document.getElementById('panel-' + name);
+  panel.classList.add('active');
+  animatePanel(panel);
   location.hash = name;
   if (name === 'dealers') loadDealers();
   else if (name === 'total') loadAllLeads();
@@ -848,6 +850,7 @@ async function rejectCandidatePayment(payId) {
 
 pollStatus();
 pollJobsStatus();
+initPageAnimations();
 switchTab(location.hash.replace('#', '') || 'dealers');
 
 // ── Live Logs ─────────────────────────────────────────────────────────────────

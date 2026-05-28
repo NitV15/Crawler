@@ -679,6 +679,7 @@ async function startCrawler() {
 async function stopCrawler() {
   document.getElementById('stopBtn').disabled = true;
   await fetch('/api/crawl/stop', { method: 'POST' });
+  pollStatus();
 }
 
 let statusPollTimer = null;
@@ -1010,14 +1011,19 @@ function animateTableRows(container) {
 
 function openModalAnimated(overlayId) {
   const overlay = document.getElementById(overlayId);
+  if (!overlay) return;
   overlay.classList.add('open');
-  anime({ targets: overlay.querySelector('.modal-box'), scale: [0.85, 1], opacity: [0, 1], duration: 400, easing: 'spring(1, 80, 10, 0)' });
+  const box = overlay.querySelector('.modal-box');
+  if (box) anime({ targets: box, scale: [0.85, 1], opacity: [0, 1], duration: 400, easing: 'spring(1, 80, 10, 0)' });
 }
 
 function closeModalAnimated(overlayId, callback) {
   const overlay = document.getElementById(overlayId);
+  if (!overlay) { if (callback) callback(); return; }
+  const box = overlay.querySelector('.modal-box');
+  if (!box) { overlay.classList.remove('open'); if (callback) callback(); return; }
   anime({
-    targets: overlay.querySelector('.modal-box'),
+    targets: box,
     scale: [1, 0.9], opacity: [1, 0], duration: 150, easing: 'easeInCubic',
     complete: () => { overlay.classList.remove('open'); if (callback) callback(); }
   });

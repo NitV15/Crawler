@@ -694,7 +694,8 @@ async function pollStatus() {
       : (s.lastBatchAt ? `Last run: Posts ${s.postsCollected} | Leads ${s.leadsFound} | Emails ${s.emailsSent}` : '');
     document.getElementById('startBtn').disabled = s.running;
     document.getElementById('stopBtn').disabled = !s.running;
-    if (s.running) statusPollTimer = setTimeout(pollStatus, 5000);
+    if (s.running) { startCrawlerGlow(); statusPollTimer = setTimeout(pollStatus, 5000); }
+    else stopCrawlerGlow();
   } catch (e) {
     statusPollTimer = setTimeout(pollStatus, 10000);
   }
@@ -947,12 +948,11 @@ function openEditModal(id) {
   document.getElementById('edit-city').value = d.city || '';
   document.getElementById('edit-service_areas').value = d.service_areas || '';
   document.getElementById('edit-custom_subreddits').value = d.custom_subreddits || '';
-  document.getElementById('editModal').classList.add('open');
+  openModalAnimated('editModal');
 }
 
 function closeEditModal() {
-  document.getElementById('editModal').classList.remove('open');
-  editingDealerId = null;
+  closeModalAnimated('editModal', () => { editingDealerId = null; });
 }
 
 async function saveDealer() {

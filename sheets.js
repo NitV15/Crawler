@@ -49,11 +49,17 @@ async function updateRow(name, id, updates) {
 }
 
 async function initSheets() {
-  const credPath = process.env.GOOGLE_CREDENTIALS_PATH;
-  if (!credPath) throw new Error('[sheets] GOOGLE_CREDENTIALS_PATH env var is required');
+  let authConfig;
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    authConfig = { credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON) };
+  } else if (process.env.GOOGLE_CREDENTIALS_PATH) {
+    authConfig = { keyFile: process.env.GOOGLE_CREDENTIALS_PATH };
+  } else {
+    throw new Error('[sheets] Set GOOGLE_CREDENTIALS_JSON or GOOGLE_CREDENTIALS_PATH');
+  }
 
   const auth = new google.auth.GoogleAuth({
-    keyFile: credPath,
+    ...authConfig,
     scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
   });
   const authClient = await auth.getClient();

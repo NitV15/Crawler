@@ -47,7 +47,6 @@ beforeEach(() => {
   sheets.incrementDealerLeadCount.mockResolvedValue();
   sheets.resetDealerSubscription.mockResolvedValue();
   sheets.isSeenPost.mockReturnValue(false);
-  sheets.markPostSeen.mockImplementation(() => {});
   sendLeadEmail.mockResolvedValue();
   shouldCheckPost.mockReturnValue(true);
   buildSubredditList.mockReturnValue(['india']);

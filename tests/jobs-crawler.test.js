@@ -65,10 +65,11 @@ test('checkCandidateSubscription: expired subscription → expired', () => {
 });
 
 test('startJobsCrawler fetches jobs per candidate and sends email', async () => {
-  startJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
-  stopJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }];
+  });
+  await startJobsCrawler();
 
   expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', 'Docker, Kubernetes', 'Bangalore');
   expect(processJobBatch).toHaveBeenCalled();
@@ -79,36 +80,39 @@ test('startJobsCrawler fetches jobs per candidate and sends email', async () => 
 
 test('startJobsCrawler skips already-seen jobs', async () => {
   sheets.isSeenJob.mockReturnValue(true);
-  startJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
-  stopJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
+  fetchIndeedJobs.mockImplementation(async (...args) => {
+    stopJobsCrawler();
+    return [fakeJob];
+  });
+  await startJobsCrawler();
   expect(sendJobAlertEmail).not.toHaveBeenCalled();
 });
 
 test('startJobsCrawler skips job older than 3 days', async () => {
-  fetchIndeedJobs.mockResolvedValue([{ ...fakeJob, created_utc: Math.floor(Date.now() / 1000) - 4 * 86400 }]);
-  startJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
-  stopJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
+  fetchIndeedJobs.mockImplementation(async () => {
+    stopJobsCrawler();
+    return [{ ...fakeJob, created_utc: Math.floor(Date.now() / 1000) - 4 * 86400 }];
+  });
+  await startJobsCrawler();
   expect(sendJobAlertEmail).not.toHaveBeenCalled();
 });
 
 test('startJobsCrawler skips when candidate at free limit (skip)', async () => {
   sheets.getCandidate.mockResolvedValue({ ...freeCandidate, lead_count: 2 });
-  startJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
-  stopJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }];
+  });
+  await startJobsCrawler();
   expect(sendJobAlertEmail).not.toHaveBeenCalled();
 });
 
 test('startJobsCrawler sends with footer when lead_count=1', async () => {
   sheets.getCandidate.mockResolvedValue({ ...freeCandidate, lead_count: 1 });
-  startJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
-  stopJobsCrawler();
-  await new Promise(r => setTimeout(r, 50));
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }];
+  });
+  await startJobsCrawler();
   expect(sendJobAlertEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: true }));
 });

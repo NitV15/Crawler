@@ -54,7 +54,7 @@ async function initSheets() {
 
   const auth = new google.auth.GoogleAuth({
     keyFile: credPath,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   const authClient = await auth.getClient();
   sheets = google.sheets({ version: 'v4', auth: authClient });

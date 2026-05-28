@@ -317,6 +317,7 @@ function renderDealers() {
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(el);
 }
 
 // ── Total Leads ───────────────────────────────────────────────────────────────
@@ -361,6 +362,7 @@ function renderAllLeads() {
       <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(el);
 }
 
 // ── Matched Leads ─────────────────────────────────────────────────────────────
@@ -404,6 +406,7 @@ function renderMatched() {
       <td style="white-space:nowrap">${(l.emailed_at||'').slice(0,10)||'—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(el);
 }
 
 // ── Unmatched Leads ───────────────────────────────────────────────────────────
@@ -462,6 +465,7 @@ function renderUnmatched() {
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(el);
 }
 
 // ── Payments ──────────────────────────────────────────────────────────────────
@@ -484,6 +488,7 @@ async function loadPayments() {
       ` : '—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(panel);
 }
 
 // ── Fetched Posts ─────────────────────────────────────────────────────────────
@@ -511,6 +516,7 @@ async function loadFetchedPosts() {
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(panel);
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -774,6 +780,7 @@ function renderCandidates() {
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(el);
 }
 
 async function toggleCandidate(id, active) {
@@ -811,6 +818,7 @@ async function loadJobMatches() {
       <td style="white-space:nowrap">${(m.emailed_at||'').slice(0,10)||'—'}</td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(panel);
 }
 
 // ── Candidate Payments Tab ─────────────────────────────────────────────────────
@@ -835,6 +843,7 @@ async function loadCandidatePayments() {
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
+  animateTableRows(panel);
 }
 
 async function verifyCandidatePayment(payId) {

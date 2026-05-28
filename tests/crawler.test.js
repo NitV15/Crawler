@@ -1,4 +1,4 @@
-jest.mock('../db');
+jest.mock('../sheets');
 jest.mock('../matcher');
 jest.mock('../mailer');
 jest.mock('../prefilter');
@@ -6,14 +6,13 @@ jest.mock('../subreddits');
 jest.mock('../instagram-fetcher');
 
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('../crawler');
-const db = require('../db');
+const sheets = require('../sheets');
 const { processPostBatch } = require('../matcher');
 const { sendLeadEmail } = require('../mailer');
 const { shouldCheckPost } = require('../prefilter');
 const { buildSubredditList } = require('../subreddits');
 const { fetchInstagramLeads } = require('../instagram-fetcher');
 
-const fakeDb = {};
 const freeDealer = {
   id: 1, name: 'Travel Co', emails: 'a@b.com',
   industry_category: 'Travel & Tourism', lead_count: 0,
@@ -41,15 +40,14 @@ function mockFetch(posts) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db.openDb.mockReturnValue(fakeDb);
-  db.getActiveDealers.mockReturnValue([freeDealer]);
-  db.getDealer.mockReturnValue(freeDealer);
-  db.saveLead.mockImplementation(() => {});
-  db.saveFetchedPost.mockImplementation(() => {});
-  db.incrementDealerLeadCount.mockImplementation(() => {});
-  db.resetDealerSubscription.mockImplementation(() => {});
-  db.isSeenPost.mockReturnValue(false);
-  db.markPostSeen.mockImplementation(() => {});
+  sheets.getActiveDealers.mockResolvedValue([freeDealer]);
+  sheets.getDealer.mockResolvedValue(freeDealer);
+  sheets.saveLead.mockResolvedValue(1);
+  sheets.saveFetchedPost.mockResolvedValue();
+  sheets.incrementDealerLeadCount.mockResolvedValue();
+  sheets.resetDealerSubscription.mockResolvedValue();
+  sheets.isSeenPost.mockReturnValue(false);
+  sheets.markPostSeen.mockImplementation(() => {});
   sendLeadEmail.mockResolvedValue();
   shouldCheckPost.mockReturnValue(true);
   buildSubredditList.mockReturnValue(['india']);
@@ -96,7 +94,7 @@ describe('startCrawler + stopCrawler', () => {
   test('sets running to false after stopCrawler is called', async () => {
     mockFetch([]);
     processPostBatch.mockImplementation(async () => { stopCrawler(); return []; });
-    await startCrawler(fakeDb);
+    await startCrawler();
     expect(getCrawlerStatus().running).toBe(false);
   });
 
@@ -104,32 +102,25 @@ describe('startCrawler + stopCrawler', () => {
     const oldUtc = Math.floor(Date.now() / 1000) - 6 * 86400;
     mockFetch([{ id: 'old1', title: 'Old post', created_utc: oldUtc }]);
     processPostBatch.mockImplementation(async (posts) => { stopCrawler(); return []; });
-    await startCrawler(fakeDb);
+    await startCrawler();
     const allPostArgs = processPostBatch.mock.calls.flatMap(call => call[0] || []);
     expect(allPostArgs.find(p => p.post_id === 'reddit_old1')).toBeUndefined();
   });
 
   test('skips already seen posts via isSeenPost', async () => {
-    db.isSeenPost.mockReturnValue(true);
+    sheets.isSeenPost.mockReturnValue(true);
     mockFetch([{ id: 'seen1', title: 'Already seen' }]);
     processPostBatch.mockImplementation(async () => { stopCrawler(); return []; });
-    await startCrawler(fakeDb);
+    await startCrawler();
     const allPostArgs = processPostBatch.mock.calls.flatMap(call => call[0] || []);
     expect(allPostArgs.find(p => p.post_id === 'reddit_seen1')).toBeUndefined();
   });
 
-  test('calls markPostSeen for new posts', async () => {
+  test('calls saveFetchedPost for new posts (which tracks seen state)', async () => {
     mockFetch([{ id: 'p1', title: 'Fresh post' }]);
     processPostBatch.mockImplementation(async () => { stopCrawler(); return []; });
-    await startCrawler(fakeDb);
-    expect(db.markPostSeen).toHaveBeenCalledWith(fakeDb, 'reddit_p1');
-  });
-
-  test('calls saveFetchedPost for new posts', async () => {
-    mockFetch([{ id: 'p2', title: 'Fresh post 2' }]);
-    processPostBatch.mockImplementation(async () => { stopCrawler(); return []; });
-    await startCrawler(fakeDb);
-    expect(db.saveFetchedPost).toHaveBeenCalled();
+    await startCrawler();
+    expect(sheets.saveFetchedPost).toHaveBeenCalledWith(expect.objectContaining({ postId: 'reddit_p1' }));
   });
 
   test('sends email and increments lead_count for matched free-tier lead', async () => {
@@ -144,13 +135,13 @@ describe('startCrawler + stopCrawler', () => {
         suggested_reply: 'We can help', matched_dealer_ids: [1],
       }];
     });
-    await startCrawler(fakeDb);
+    await startCrawler();
     expect(sendLeadEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: false }));
-    expect(db.incrementDealerLeadCount).toHaveBeenCalledWith(fakeDb, 1);
+    expect(sheets.incrementDealerLeadCount).toHaveBeenCalledWith(1);
   });
 
   test('sends email with subscribe footer when lead_count is 2', async () => {
-    db.getDealer.mockReturnValue({ ...freeDealer, lead_count: 2 });
+    sheets.getDealer.mockResolvedValue({ ...freeDealer, lead_count: 2 });
     mockFetch([{ id: 'x2', title: 'Need sofa' }]);
     processPostBatch.mockImplementation(async (posts) => {
       stopCrawler();
@@ -162,7 +153,7 @@ describe('startCrawler + stopCrawler', () => {
         suggested_reply: 'We have sofas', matched_dealer_ids: [1],
       }];
     });
-    await startCrawler(fakeDb);
+    await startCrawler();
     expect(sendLeadEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: true }));
   });
 
@@ -178,8 +169,8 @@ describe('startCrawler + stopCrawler', () => {
         suggested_reply: 'We can help', matched_dealer_ids: [],
       }];
     });
-    await startCrawler(fakeDb);
-    expect(db.saveLead).toHaveBeenCalledWith(fakeDb, expect.objectContaining({ status: 'unmatched', dealerId: null }));
+    await startCrawler();
+    expect(sheets.saveLead).toHaveBeenCalledWith(expect.objectContaining({ status: 'unmatched', dealerId: null }));
     expect(sendLeadEmail).not.toHaveBeenCalled();
   });
 
@@ -189,14 +180,14 @@ describe('startCrawler + stopCrawler', () => {
       stopCrawler();
       return [{ post_id: posts[0].post_id, is_lead: true, is_hiring_post: true }];
     });
-    await startCrawler(fakeDb);
-    expect(db.saveLead).not.toHaveBeenCalled();
+    await startCrawler();
+    expect(sheets.saveLead).not.toHaveBeenCalled();
     expect(sendLeadEmail).not.toHaveBeenCalled();
   });
 
   test('resets expired subscription and saves lead as unmatched', async () => {
     const past = new Date(Date.now() - 1000).toISOString();
-    db.getDealer.mockReturnValue({ ...freeDealer, subscription_status: 'active', subscription_expires_at: past, lead_count: 5 });
+    sheets.getDealer.mockResolvedValue({ ...freeDealer, subscription_status: 'active', subscription_expires_at: past, lead_count: 5 });
     mockFetch([{ id: 'e1', title: 'Need gym' }]);
     processPostBatch.mockImplementation(async (posts) => {
       stopCrawler();
@@ -207,8 +198,8 @@ describe('startCrawler + stopCrawler', () => {
         post_location: null, suggested_reply: 'Join us', matched_dealer_ids: [1],
       }];
     });
-    await startCrawler(fakeDb);
-    expect(db.resetDealerSubscription).toHaveBeenCalledWith(fakeDb, 1);
+    await startCrawler();
+    expect(sheets.resetDealerSubscription).toHaveBeenCalledWith(1);
     expect(sendLeadEmail).not.toHaveBeenCalled();
   });
 });

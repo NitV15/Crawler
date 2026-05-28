@@ -1,15 +1,14 @@
-jest.mock('../db');
+jest.mock('../sheets');
 jest.mock('../indeed-fetcher');
 jest.mock('../job-matcher');
 jest.mock('../mailer');
 
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('../jobs-crawler');
-const db = require('../db');
+const sheets = require('../sheets');
 const { fetchIndeedJobs } = require('../indeed-fetcher');
 const { processJobBatch } = require('../job-matcher');
 const { sendJobAlertEmail } = require('../mailer');
 
-const fakeDb = {};
 const freeCandidate = {
   id: 1, name: 'Raj Kumar', emails: 'raj@test.com',
   role: 'DevOps Engineer', skills: 'Docker, Kubernetes',
@@ -26,13 +25,13 @@ const fakeJob = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db.getActiveCandidates.mockReturnValue([freeCandidate]);
-  db.getCandidate.mockReturnValue(freeCandidate);
-  db.saveJobMatch.mockImplementation(() => {});
-  db.incrementCandidateLeadCount.mockImplementation(() => {});
-  db.resetCandidateSubscription.mockImplementation(() => {});
-  db.isSeenJob.mockReturnValue(false);
-  db.markJobSeen.mockImplementation(() => {});
+  sheets.getActiveCandidates.mockResolvedValue([freeCandidate]);
+  sheets.getCandidate.mockResolvedValue(freeCandidate);
+  sheets.saveJobMatch.mockResolvedValue();
+  sheets.incrementCandidateLeadCount.mockResolvedValue();
+  sheets.resetCandidateSubscription.mockResolvedValue();
+  sheets.isSeenJob.mockReturnValue(false);
+  sheets.markJobSeen.mockImplementation(() => {});
   fetchIndeedJobs.mockResolvedValue([fakeJob]);
   processJobBatch.mockResolvedValue([{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }]);
   sendJobAlertEmail.mockResolvedValue();
@@ -66,7 +65,7 @@ test('checkCandidateSubscription: expired subscription → expired', () => {
 });
 
 test('startJobsCrawler fetches jobs per candidate and sends email', async () => {
-  startJobsCrawler(fakeDb);
+  startJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
   stopJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
@@ -74,13 +73,13 @@ test('startJobsCrawler fetches jobs per candidate and sends email', async () => 
   expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', 'Docker, Kubernetes', 'Bangalore');
   expect(processJobBatch).toHaveBeenCalled();
   expect(sendJobAlertEmail).toHaveBeenCalledTimes(1);
-  expect(db.saveJobMatch).toHaveBeenCalled();
-  expect(db.incrementCandidateLeadCount).toHaveBeenCalledWith(fakeDb, 1);
+  expect(sheets.saveJobMatch).toHaveBeenCalled();
+  expect(sheets.incrementCandidateLeadCount).toHaveBeenCalledWith(1);
 });
 
 test('startJobsCrawler skips already-seen jobs', async () => {
-  db.isSeenJob.mockReturnValue(true);
-  startJobsCrawler(fakeDb);
+  sheets.isSeenJob.mockReturnValue(true);
+  startJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
   stopJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
@@ -89,7 +88,7 @@ test('startJobsCrawler skips already-seen jobs', async () => {
 
 test('startJobsCrawler skips job older than 3 days', async () => {
   fetchIndeedJobs.mockResolvedValue([{ ...fakeJob, created_utc: Math.floor(Date.now() / 1000) - 4 * 86400 }]);
-  startJobsCrawler(fakeDb);
+  startJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
   stopJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
@@ -97,8 +96,8 @@ test('startJobsCrawler skips job older than 3 days', async () => {
 });
 
 test('startJobsCrawler skips when candidate at free limit (skip)', async () => {
-  db.getCandidate.mockReturnValue({ ...freeCandidate, lead_count: 2 });
-  startJobsCrawler(fakeDb);
+  sheets.getCandidate.mockResolvedValue({ ...freeCandidate, lead_count: 2 });
+  startJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
   stopJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
@@ -106,8 +105,8 @@ test('startJobsCrawler skips when candidate at free limit (skip)', async () => {
 });
 
 test('startJobsCrawler sends with footer when lead_count=1', async () => {
-  db.getCandidate.mockReturnValue({ ...freeCandidate, lead_count: 1 });
-  startJobsCrawler(fakeDb);
+  sheets.getCandidate.mockResolvedValue({ ...freeCandidate, lead_count: 1 });
+  startJobsCrawler();
   await new Promise(r => setTimeout(r, 50));
   stopJobsCrawler();
   await new Promise(r => setTimeout(r, 50));

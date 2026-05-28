@@ -26,6 +26,15 @@ function createApp() {
   app.use(express.static(path.join(__dirname, 'public')));
   app.get('/', (req, res) => res.redirect('/admin.html'));
 
+  app.get('/api/debug-env', (req, res) => {
+    res.json({
+      SPREADSHEET_ID: process.env.SPREADSHEET_ID || 'NOT SET',
+      HAS_CREDENTIALS_JSON: !!process.env.GOOGLE_CREDENTIALS_JSON,
+      HAS_CREDENTIALS_PATH: !!process.env.GOOGLE_CREDENTIALS_PATH,
+      NODE_ENV: process.env.NODE_ENV || 'not set',
+    });
+  });
+
   app.get('/register-candidate', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'register-candidate.html'));
   });

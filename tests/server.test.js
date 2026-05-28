@@ -1,6 +1,52 @@
 const request = require('supertest');
 const { createApp } = require('../server');
-const { openDb, addDealer, addPayment } = require('../db');
+
+jest.mock('../sheets', () => ({
+  initSheets: jest.fn().mockResolvedValue(),
+  getDealers: jest.fn().mockResolvedValue([]),
+  getDealer: jest.fn().mockResolvedValue(null),
+  addDealer: jest.fn().mockResolvedValue(1),
+  updateDealer: jest.fn().mockResolvedValue(),
+  toggleDealer: jest.fn().mockResolvedValue(),
+  incrementDealerLeadCount: jest.fn().mockResolvedValue(),
+  activateDealerSubscription: jest.fn().mockResolvedValue(),
+  resetDealerSubscription: jest.fn().mockResolvedValue(),
+  saveLead: jest.fn().mockResolvedValue(1),
+  getLeads: jest.fn().mockResolvedValue([]),
+  getAllLeads: jest.fn().mockResolvedValue([]),
+  getUnmatchedLeads: jest.fn().mockResolvedValue([]),
+  getLead: jest.fn().mockResolvedValue(null),
+  assignLead: jest.fn().mockResolvedValue(),
+  saveFetchedPost: jest.fn().mockResolvedValue(),
+  getFetchedPosts: jest.fn().mockResolvedValue([]),
+  getFetchedPost: jest.fn().mockResolvedValue(null),
+  isSeenPost: jest.fn().mockReturnValue(false),
+  markPostSeen: jest.fn(),
+  addPayment: jest.fn().mockResolvedValue(1),
+  getPayment: jest.fn().mockResolvedValue(null),
+  getPayments: jest.fn().mockResolvedValue([]),
+  verifyPayment: jest.fn().mockResolvedValue(),
+  rejectPayment: jest.fn().mockResolvedValue(),
+  addCandidate: jest.fn().mockResolvedValue(1),
+  getCandidates: jest.fn().mockResolvedValue([]),
+  getActiveCandidates: jest.fn().mockResolvedValue([]),
+  getCandidate: jest.fn().mockResolvedValue(null),
+  updateCandidate: jest.fn().mockResolvedValue(),
+  toggleCandidate: jest.fn().mockResolvedValue(),
+  incrementCandidateLeadCount: jest.fn().mockResolvedValue(),
+  activateCandidateSubscription: jest.fn().mockResolvedValue(),
+  resetCandidateSubscription: jest.fn().mockResolvedValue(),
+  saveJobMatch: jest.fn().mockResolvedValue(),
+  getJobMatches: jest.fn().mockResolvedValue([]),
+  isSeenJob: jest.fn().mockReturnValue(false),
+  markJobSeen: jest.fn(),
+  addCandidatePayment: jest.fn().mockResolvedValue(1),
+  getCandidatePayment: jest.fn().mockResolvedValue(null),
+  getCandidatePayments: jest.fn().mockResolvedValue([]),
+  verifyCandidatePayment: jest.fn().mockResolvedValue(),
+  rejectCandidatePayment: jest.fn().mockResolvedValue(),
+  cleanupOldData: jest.fn().mockResolvedValue({ deleted_fetched: 0, deleted_unmatched: 0 }),
+}));
 
 jest.mock('../crawler', () => ({
   startCrawler: jest.fn().mockResolvedValue(),
@@ -11,12 +57,28 @@ jest.mock('../crawler', () => ({
   }),
   checkSubscription: jest.fn().mockReturnValue('send'),
 }));
-jest.mock('../mailer', () => ({
-  sendSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(),
-  sendPaymentRejectedEmail: jest.fn().mockResolvedValue(),
+
+jest.mock('../jobs-crawler', () => ({
+  startJobsCrawler: jest.fn().mockResolvedValue(),
+  stopJobsCrawler: jest.fn(),
+  getJobsCrawlerStatus: jest.fn().mockReturnValue({
+    running: false, jobsCollected: 0, matchesFound: 0, lastBatchAt: null,
+  }),
+  checkCandidateSubscription: jest.fn().mockReturnValue('send'),
 }));
 
-let db, app;
+jest.mock('../mailer', () => ({
+  sendLeadEmail: jest.fn().mockResolvedValue(),
+  sendSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(),
+  sendPaymentRejectedEmail: jest.fn().mockResolvedValue(),
+  sendJobAlertEmail: jest.fn().mockResolvedValue(),
+  sendCandidateSubscriptionConfirmationEmail: jest.fn().mockResolvedValue(),
+  sendCandidatePaymentRejectedEmail: jest.fn().mockResolvedValue(),
+}));
+
+const sheetsModule = require('../sheets');
+let app;
+
 const dealerData = {
   name: 'Test Co', emails: 'a@b.com', industry_category: 'Furniture & Home Decor',
   services: 'chairs', target_customers: 'offices', keywords: 'chair',
@@ -24,18 +86,17 @@ const dealerData = {
 };
 
 beforeEach(() => {
-  db = openDb(':memory:');
-  app = createApp(db);
+  jest.clearAllMocks();
+  app = createApp();
 });
-afterEach(() => db.close());
 
 test('POST /api/register creates dealer with new fields', async () => {
   const res = await request(app).post('/api/register').send(dealerData);
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
-  const dealer = db.prepare('SELECT * FROM dealers WHERE name = ?').get('Test Co');
-  expect(dealer.city).toBe('Faridabad');
-  expect(dealer.state).toBe('Haryana');
+  expect(sheetsModule.addDealer).toHaveBeenCalledWith(expect.objectContaining({
+    name: 'Test Co', city: 'Faridabad', state: 'Haryana',
+  }));
 });
 
 test('POST /api/register returns 400 when required fields missing', async () => {
@@ -44,7 +105,9 @@ test('POST /api/register returns 400 when required fields missing', async () => 
 });
 
 test('GET /api/dealers returns dealer list', async () => {
-  addDealer(db, dealerData);
+  sheetsModule.getDealers.mockResolvedValue([
+    { id: '1', name: 'Test Co', city: 'Faridabad', active: '1' },
+  ]);
   const res = await request(app).get('/api/dealers');
   expect(res.status).toBe(200);
   expect(res.body).toHaveLength(1);
@@ -79,28 +142,27 @@ test('POST /api/crawl/trigger returns 404 — route removed', async () => {
 });
 
 test('POST /api/payments submits UTR', async () => {
-  const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
-  const res = await request(app).post('/api/payments').send({ dealer_id: dealerId, utr_number: 'UTR123' });
+  const res = await request(app).post('/api/payments').send({ dealer_id: 1, utr_number: 'UTR123' });
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
+  expect(sheetsModule.addPayment).toHaveBeenCalledWith(expect.objectContaining({ utrNumber: 'UTR123' }));
 });
 
 test('POST /api/payments/:id/verify activates subscription', async () => {
-  const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
-  const { lastInsertRowid: payId } = addPayment(db, { dealerId, utrNumber: 'UTR456' });
-  const res = await request(app).post(`/api/payments/${payId}/verify`).send({});
+  sheetsModule.getPayment.mockResolvedValue({ id: 5, dealer_id: 1, utr_number: 'UTR456', status: 'pending' });
+  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
+  const res = await request(app).post('/api/payments/5/verify').send({});
   expect(res.status).toBe(200);
-  const dealer = db.prepare('SELECT * FROM dealers WHERE id = ?').get(dealerId);
-  expect(dealer.subscription_status).toBe('active');
+  expect(sheetsModule.verifyPayment).toHaveBeenCalledWith(5);
+  expect(sheetsModule.activateDealerSubscription).toHaveBeenCalledWith(1);
 });
 
 test('POST /api/payments/:id/reject sets status rejected', async () => {
-  const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
-  const { lastInsertRowid: payId } = addPayment(db, { dealerId, utrNumber: 'UTR789' });
-  const res = await request(app).post(`/api/payments/${payId}/reject`).send({});
+  sheetsModule.getPayment.mockResolvedValue({ id: 6, dealer_id: 1, utr_number: 'UTR789', status: 'pending' });
+  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
+  const res = await request(app).post('/api/payments/6/reject').send({});
   expect(res.status).toBe(200);
-  const p = db.prepare('SELECT * FROM payments WHERE id = ?').get(payId);
-  expect(p.status).toBe('rejected');
+  expect(sheetsModule.rejectPayment).toHaveBeenCalledWith(6);
 });
 
 test('GET /api/leads/unmatched returns unmatched leads', async () => {
@@ -110,11 +172,9 @@ test('GET /api/leads/unmatched returns unmatched leads', async () => {
 });
 
 test('POST /api/leads/:id/assign assigns lead to dealer', async () => {
-  const { lastInsertRowid: dealerId } = addDealer(db, dealerData);
-  db.prepare(`INSERT INTO leads (dealer_id, reddit_post_id, post_url, subreddit, status) VALUES (NULL, 'p1', 'http://x.com', 'india', 'unmatched')`).run();
-  const lead = db.prepare("SELECT id FROM leads WHERE reddit_post_id = 'p1'").get();
-  const res = await request(app).post(`/api/leads/${lead.id}/assign`).send({ dealer_id: dealerId });
+  const res = await request(app).post('/api/leads/10/assign').send({ dealer_id: 1 });
   expect(res.status).toBe(200);
+  expect(sheetsModule.assignLead).toHaveBeenCalledWith(10, 1);
 });
 
 test('GET /api/payments returns payment list', async () => {

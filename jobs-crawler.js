@@ -51,7 +51,15 @@ async function runJobsCycle() {
     if (!jobsCrawlerState.running) break;
     jobsCrawlerState.currentCandidate = candidate.name;
     try {
-      const jobs = await fetchIndeedJobs(candidate.role, candidate.skills, candidate.city);
+      const locations = [candidate.city, ...(candidate.preferred_locations || '').split(',').map(s => s.trim())]
+        .filter((v, i, a) => v && a.indexOf(v) === i);
+      let jobs = [];
+      for (const loc of locations) {
+        const fetched = await fetchIndeedJobs(candidate.role, candidate.skills, loc === 'Remote' ? '' : loc);
+        jobs.push(...fetched);
+      }
+      const seenIds = new Set();
+      jobs = jobs.filter(j => seenIds.has(j.job_id) ? false : seenIds.add(j.job_id));
       for (const job of jobs) {
         if (job.created_utc < threeDaysAgo) continue;
         if (seenThisCycle.has(job.job_id)) continue;

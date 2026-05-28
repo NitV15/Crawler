@@ -77,6 +77,7 @@ jest.mock('../mailer', () => ({
 }));
 
 const sheetsModule = require('../sheets');
+const mailerModule = require('../mailer');
 let app;
 
 const dealerData = {
@@ -155,6 +156,7 @@ test('POST /api/payments/:id/verify activates subscription', async () => {
   expect(res.status).toBe(200);
   expect(sheetsModule.verifyPayment).toHaveBeenCalledWith(5);
   expect(sheetsModule.activateDealerSubscription).toHaveBeenCalledWith(1);
+  expect(mailerModule.sendSubscriptionConfirmationEmail).toHaveBeenCalled();
 });
 
 test('POST /api/payments/:id/reject sets status rejected', async () => {
@@ -163,6 +165,7 @@ test('POST /api/payments/:id/reject sets status rejected', async () => {
   const res = await request(app).post('/api/payments/6/reject').send({});
   expect(res.status).toBe(200);
   expect(sheetsModule.rejectPayment).toHaveBeenCalledWith(6);
+  expect(mailerModule.sendPaymentRejectedEmail).toHaveBeenCalled();
 });
 
 test('GET /api/leads/unmatched returns unmatched leads', async () => {
@@ -181,4 +184,35 @@ test('GET /api/payments returns payment list', async () => {
   const res = await request(app).get('/api/payments');
   expect(res.status).toBe(200);
   expect(Array.isArray(res.body)).toBe(true);
+});
+
+test('POST /api/candidates/register creates a candidate', async () => {
+  sheetsModule.addCandidate.mockResolvedValue(1);
+  const res = await request(app).post('/api/candidates/register').send({
+    name: 'John Dev', emails: 'john@dev.com', role: 'Developer',
+    skills: 'JavaScript', experience_level: 'Mid', city: 'Delhi', state: 'Delhi',
+    preferred_locations: 'Delhi,Mumbai',
+  });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(sheetsModule.addCandidate).toHaveBeenCalledWith(expect.objectContaining({
+    name: 'John Dev', city: 'Delhi',
+  }));
+});
+
+test('GET /api/candidates returns candidate list', async () => {
+  sheetsModule.getCandidates.mockResolvedValue([{ id: '1', name: 'John Dev', active: '1' }]);
+  const res = await request(app).get('/api/candidates');
+  expect(res.status).toBe(200);
+  expect(res.body).toHaveLength(1);
+  expect(res.body[0].name).toBe('John Dev');
+});
+
+test('POST /api/candidate-payments creates a payment', async () => {
+  sheetsModule.getCandidate.mockResolvedValue({ id: '1', name: 'John Dev', emails: 'john@dev.com' });
+  sheetsModule.addCandidatePayment.mockResolvedValue(1);
+  const res = await request(app).post('/api/candidate-payments').send({ candidate_id: 1, utr_number: 'UTR999' });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(sheetsModule.addCandidatePayment).toHaveBeenCalled();
 });

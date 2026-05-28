@@ -24,6 +24,7 @@ function createApp(db) {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(express.static(path.join(__dirname, 'public')));
+  app.get('/', (req, res) => res.redirect('/admin.html'));
 
   app.get('/register-candidate', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'register-candidate.html'));

@@ -304,7 +304,7 @@ async function addPayment({ dealerId, utrNumber }) {
   return appendRow('payments', {
     dealer_id: String(dealerId),
     utr_number: utrNumber,
-    amount: '1',
+    amount: '10',
     status: 'pending',
     created_at: new Date().toISOString(),
     verified_at: '',

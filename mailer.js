@@ -32,7 +32,7 @@ Crawler — Lead Discovery System`;
 ─────────────────────────────────────────────
 You've used your 2 free leads!
 
-Subscribe now for ₹1 and get unlimited leads for 1 full month.
+Subscribe now for ₹10 and get unlimited leads for 1 full month.
 
 Click here to subscribe: ${paymentLink}
 ─────────────────────────────────────────────`;

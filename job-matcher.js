@@ -2,7 +2,7 @@ require('dotenv').config();
 const { GoogleGenAI } = require('@google/genai');
 
 function getAI() {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 20000 } });
 }
 
 async function processJobBatch(pairs) {
@@ -42,11 +42,7 @@ PAIRS:
 ${JSON.stringify(pairList)}`;
 
   async function callGemini() {
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { httpOptions: { timeout: 20000 } },
-    });
+    const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
     const text = result.text.trim().replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
     return JSON.parse(text);
   }

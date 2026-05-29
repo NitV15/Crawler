@@ -12,7 +12,7 @@ const CATEGORIES = [
 ];
 
 function getAI() {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: 20000 } });
 }
 
 async function processPostBatch(posts, dealers) {

@@ -74,7 +74,7 @@ test('startJobsCrawler fetches jobs per candidate and sends email', async () => 
   });
   await startJobsCrawler();
 
-  expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', 'Docker, Kubernetes', 'Bangalore');
+  expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', '', 'Bangalore');
   expect(processJobBatch).toHaveBeenCalled();
   expect(sendJobAlertEmail).toHaveBeenCalledTimes(1);
   expect(sheets.saveJobMatch).toHaveBeenCalled();

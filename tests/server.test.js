@@ -40,6 +40,8 @@ jest.mock('../sheets', () => ({
   getJobMatches: jest.fn().mockResolvedValue([]),
   isSeenJob: jest.fn().mockReturnValue(false),
   markJobSeen: jest.fn(),
+  getFetchedJobs: jest.fn().mockResolvedValue([]),
+  getFetchedJob: jest.fn().mockResolvedValue(null),
   addCandidatePayment: jest.fn().mockResolvedValue(1),
   getCandidatePayment: jest.fn().mockResolvedValue(null),
   getCandidatePayments: jest.fn().mockResolvedValue([]),
@@ -77,7 +79,9 @@ jest.mock('../mailer', () => ({
 }));
 
 const sheetsModule = require('../sheets');
+const sheets = sheetsModule;
 const mailerModule = require('../mailer');
+const mailer = mailerModule;
 let app;
 
 const dealerData = {
@@ -215,4 +219,57 @@ test('POST /api/candidate-payments creates a payment', async () => {
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
   expect(sheetsModule.addCandidatePayment).toHaveBeenCalled();
+});
+
+describe('GET /api/fetched-jobs', () => {
+  test('returns fetched jobs list', async () => {
+    sheets.getFetchedJobs.mockResolvedValue([
+      { id: '1', job_id: 'adzuna_1', job_title: 'React Dev', company: 'Startup', location: 'Pune', job_url: 'http://a', snippet: 'React needed', fetched_at: '2026-05-29T00:00:00Z' },
+    ]);
+    const res = await request(app).get('/api/fetched-jobs');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].job_title).toBe('React Dev');
+  });
+});
+
+describe('POST /api/fetched-jobs/:id/send', () => {
+  const fakeJob = { id: '3', job_id: 'adzuna_3', job_title: 'DevOps Eng', company: 'Razorpay', location: 'Bangalore', job_url: 'http://j', snippet: 'K8s', fetched_at: '2026-05-29T00:00:00Z' };
+  const fakeCandidate = { id: '1', name: 'Raj', emails: 'raj@test.com', lead_count: '0', subscription_status: 'free', subscription_expires_at: null };
+
+  beforeEach(() => {
+    sheets.getFetchedJob.mockResolvedValue(fakeJob);
+    sheets.getCandidate.mockResolvedValue(fakeCandidate);
+    sheets.saveJobMatch.mockResolvedValue(1);
+    sheets.incrementCandidateLeadCount.mockResolvedValue();
+    mailer.sendJobAlertEmail.mockResolvedValue();
+  });
+
+  test('returns 400 if candidate_id missing', async () => {
+    const res = await request(app).post('/api/fetched-jobs/3/send').send({});
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 404 if job not found', async () => {
+    sheets.getFetchedJob.mockResolvedValue(null);
+    const res = await request(app).post('/api/fetched-jobs/99/send').send({ candidate_id: 1 });
+    expect(res.status).toBe(404);
+  });
+
+  test('returns 404 if candidate not found', async () => {
+    sheets.getCandidate.mockResolvedValue(null);
+    const res = await request(app).post('/api/fetched-jobs/3/send').send({ candidate_id: 99 });
+    expect(res.status).toBe(404);
+  });
+
+  test('saves job match and sends email', async () => {
+    const res = await request(app).post('/api/fetched-jobs/3/send').send({ candidate_id: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(sheets.saveJobMatch).toHaveBeenCalledWith(expect.objectContaining({
+      candidateId: '1', indeedJobId: 'adzuna_3',
+    }));
+    expect(mailer.sendJobAlertEmail).toHaveBeenCalled();
+    expect(sheets.incrementCandidateLeadCount).toHaveBeenCalledWith('1');
+  });
 });

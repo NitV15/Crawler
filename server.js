@@ -8,13 +8,14 @@ const {
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts, getFetchedPost, getLead, cleanupOldData,
+  getFetchedJobs, getFetchedJob,
   addCandidate, getCandidates, getCandidate, toggleCandidate, updateCandidate,
   activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
   saveJobMatch, getJobMatches,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
 } = require('./sheets');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
-const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus } = require('./jobs-crawler');
+const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('./jobs-crawler');
 const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail,
         sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail } = require('./mailer');
 const { identifyLead } = require('./matcher');
@@ -198,6 +199,42 @@ function createApp() {
 
   app.get('/api/fetched-posts', async (req, res) => {
     try { res.json(await getFetchedPosts()); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
+  });
+
+  app.get('/api/fetched-jobs', async (req, res) => {
+    try { res.json(await getFetchedJobs()); } catch (err) { res.status(500).json({ error: 'Failed to fetch jobs' }); }
+  });
+
+  app.post('/api/fetched-jobs/:id/send', async (req, res) => {
+    const { candidate_id } = req.body;
+    if (!candidate_id) return res.status(400).json({ error: 'candidate_id required' });
+    try {
+      const job = await getFetchedJob(parseInt(req.params.id));
+      if (!job) return res.status(404).json({ error: 'Job not found' });
+      const candidate = await getCandidate(parseInt(candidate_id));
+      if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+
+      const action = checkCandidateSubscription(candidate);
+      const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+
+      await saveJobMatch({
+        candidateId: candidate.id, indeedJobId: job.job_id,
+        jobTitle: job.job_title, company: job.company, location: job.location,
+        jobUrl: job.job_url, snippet: job.snippet, suggestedTip: '', status: 'matched',
+      });
+      await sendJobAlertEmail({
+        candidate,
+        job: { job_title: job.job_title, company: job.company, location: job.location,
+               snippet: job.snippet, job_url: job.job_url, date: job.fetched_at },
+        suggestedTip: '(Manually sent by admin)',
+        includeSubscribeFooter: action === 'send_with_footer',
+        paymentLink: `${BASE_URL}/candidate-pay?candidate_id=${candidate.id}`,
+      });
+      await incrementCandidateLeadCount(candidate.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   app.post('/api/fetched-posts/:id/send', async (req, res) => {

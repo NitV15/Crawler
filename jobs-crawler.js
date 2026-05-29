@@ -103,10 +103,12 @@ async function runJobsCycle() {
     if (!result || !result.is_relevant) continue;
 
     const { candidate, job } = buffer[i];
+    console.log(`[jobs] match found: ${job.title} for ${candidate.name}, fetching fresh candidate`);
     const freshCandidate = await getCandidate(candidate.id);
     if (!freshCandidate) continue;
 
     const action = checkCandidateSubscription(freshCandidate);
+    console.log(`[jobs] subscription check: ${action}`);
     if (action === 'expired') {
       await resetCandidateSubscription(freshCandidate.id);
       sendCandidateExpiredEmail(freshCandidate, `${BASE_URL}/candidate-pay?candidate_id=${freshCandidate.id}`)
@@ -115,12 +117,13 @@ async function runJobsCycle() {
     }
     if (action === 'skip') continue;
 
+    console.log(`[jobs] saving job match to sheets`);
     await saveJobMatch({
       candidateId: freshCandidate.id, indeedJobId: job.job_id,
       jobTitle: job.title, company: job.company, location: job.location,
       jobUrl: job.url, snippet: job.snippet, suggestedTip: result.suggested_tip, status: 'matched',
     });
-
+    console.log(`[jobs] sending email`);
     await sendJobAlertEmail({
       candidate: freshCandidate,
       job: { job_title: job.title, company: job.company, location: job.location,
@@ -129,7 +132,7 @@ async function runJobsCycle() {
       includeSubscribeFooter: action === 'send_with_footer',
       paymentLink: `${BASE_URL}/candidate-pay?candidate_id=${freshCandidate.id}`,
     });
-
+    console.log(`[jobs] incrementing lead count`);
     await incrementCandidateLeadCount(freshCandidate.id);
     jobsCrawlerState.matchesFound++;
     jobsCrawlerState.emailsSent++;

@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { getActiveCandidates, getCandidate, saveJobMatch, incrementCandidateLeadCount,
-        resetCandidateSubscription, isSeenJob, markJobSeen } = require('./sheets');
+        resetCandidateSubscription, isSeenJob, markJobSeen, saveFetchedJob } = require('./sheets');
 const { fetchIndeedJobs } = require('./indeed-fetcher');
 const { processJobBatch } = require('./job-matcher');
 const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('./mailer');
@@ -81,6 +81,8 @@ async function runJobsCycle() {
         seenThisCycle.add(job.job_id);
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
+        saveFetchedJob({ jobId: job.job_id, jobTitle: job.title, company: job.company, location: job.location, jobUrl: job.url, snippet: job.snippet })
+          .catch(err => console.error(`[jobs] saveFetchedJob failed: ${err.message}`));
       }
     } catch (err) {
       console.error(`[jobs] ${candidate.name} fetch failed: ${err.message}`);

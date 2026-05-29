@@ -35,6 +35,7 @@ beforeEach(() => {
   sheets.resetCandidateSubscription.mockResolvedValue();
   sheets.isSeenJob.mockReturnValue(false);
   sheets.markJobSeen.mockImplementation(() => {});
+  sheets.saveFetchedJob.mockResolvedValue();
   fetchIndeedJobs.mockResolvedValue([fakeJob]);
   processJobBatch.mockResolvedValue([{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }]);
   sendJobAlertEmail.mockResolvedValue();
@@ -79,6 +80,17 @@ test('startJobsCrawler fetches jobs per candidate and sends email', async () => 
   expect(sendJobAlertEmail).toHaveBeenCalledTimes(1);
   expect(sheets.saveJobMatch).toHaveBeenCalled();
   expect(sheets.incrementCandidateLeadCount).toHaveBeenCalledWith(1);
+});
+
+test('startJobsCrawler saves each job to fetched_jobs', async () => {
+  processJobBatch.mockImplementation(async () => { stopJobsCrawler(); return []; });
+  await startJobsCrawler();
+  await new Promise(r => setTimeout(r, 50));
+  expect(sheets.saveFetchedJob).toHaveBeenCalledWith(expect.objectContaining({
+    jobId: fakeJob.job_id,
+    jobTitle: fakeJob.title,
+    company: fakeJob.company,
+  }));
 });
 
 test('startJobsCrawler skips already-seen jobs', async () => {

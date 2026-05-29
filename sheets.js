@@ -5,12 +5,14 @@ let sheets;
 let spreadsheetId;
 const seenPosts = new Set();
 const seenJobs = new Set();
+const seenFetchedJobs = new Set();
 
 const COLS = {
   dealers: ['id','name','emails','industry','description','industry_category','services','target_customers','keywords','state','city','service_areas','custom_subreddits','lead_count','subscription_status','subscription_expires_at','active','created_at'],
   leads: ['id','dealer_id','reddit_post_id','post_title','post_text','post_url','subreddit','match_reason','suggested_reply','what_to_sell','lead_category','post_location','status','emailed_at'],
   payments: ['id','dealer_id','utr_number','amount','status','created_at','verified_at'],
   fetched_posts: ['id','post_id','post_title','post_text','post_url','subreddit','fetched_at'],
+  fetched_jobs: ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'],
   candidates: ['id','name','emails','role','skills','experience_level','city','state','preferred_locations','lead_count','subscription_status','subscription_expires_at','active','created_at'],
   job_matches: ['id','candidate_id','indeed_job_id','job_title','company','location','job_url','snippet','suggested_tip','status','emailed_at'],
   candidate_payments: ['id','candidate_id','utr_number','amount','status','created_at','verified_at'],
@@ -90,7 +92,29 @@ async function initSheets() {
   fetchedRows.forEach(r => r.post_id && seenPosts.add(r.post_id));
   const jobRows = await readSheet('job_matches');
   jobRows.forEach(r => r.indeed_job_id && seenJobs.add(r.indeed_job_id));
-  console.log(`[sheets] Connected. seenPosts=${seenPosts.size}, seenJobs=${seenJobs.size}`);
+
+  // Ensure fetched_jobs tab exists (may be missing from older spreadsheets)
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+    const existingTabs = new Set(meta.data.sheets.map(s => s.properties.title));
+    if (!existingTabs.has('fetched_jobs')) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests: [{ addSheet: { properties: { title: 'fetched_jobs' } } }] },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId, range: 'fetched_jobs!A1', valueInputOption: 'RAW',
+        requestBody: { values: [COLS.fetched_jobs] },
+      });
+      console.log('[sheets] Created fetched_jobs tab');
+    }
+  } catch (e) {
+    console.warn('[sheets] Could not check/create fetched_jobs tab:', e.message);
+  }
+
+  const fetchedJobRows = await readSheet('fetched_jobs');
+  fetchedJobRows.forEach(r => r.job_id && seenFetchedJobs.add(r.job_id));
+  console.log(`[sheets] Connected. seenPosts=${seenPosts.size}, seenJobs=${seenJobs.size}, seenFetchedJobs=${seenFetchedJobs.size}`);
 }
 
 // ─── Dealers ──────────────────────────────────────────────────────────────────
@@ -243,6 +267,32 @@ async function getFetchedPost(id) {
 
 function isSeenPost(postId) { return seenPosts.has(postId); }
 function markPostSeen(postId) { seenPosts.add(postId); }
+
+// ─── Fetched Jobs ─────────────────────────────────────────────────────────────
+
+async function saveFetchedJob({ jobId, jobTitle, company, location, jobUrl, snippet }) {
+  if (seenFetchedJobs.has(jobId)) return;
+  seenFetchedJobs.add(jobId);
+  return appendRow('fetched_jobs', {
+    job_id: jobId,
+    job_title: jobTitle || '',
+    company: company || '',
+    location: location || '',
+    job_url: jobUrl || '',
+    snippet: (snippet || '').slice(0, 500),
+    fetched_at: new Date().toISOString(),
+  });
+}
+
+async function getFetchedJobs(limit = 200) {
+  const rows = await readSheet('fetched_jobs');
+  return rows.sort((a, b) => parseInt(b.id) - parseInt(a.id)).slice(0, limit);
+}
+
+async function getFetchedJob(id) {
+  const rows = await readSheet('fetched_jobs');
+  return rows.find(r => String(r.id) === String(id)) || null;
+}
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
@@ -448,6 +498,7 @@ module.exports = {
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead,
   saveFetchedPost, getFetchedPosts, getFetchedPost, isSeenPost, markPostSeen,
+  saveFetchedJob, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs: () => seenFetchedJobs.clear(),
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate,
   incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,

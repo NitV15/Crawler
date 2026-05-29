@@ -38,13 +38,23 @@ function mockSheet(headers, rows = []) {
 }
 
 let sheets;
+let saveFetchedJob, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs;
+
+const FETCHED_JOB_HEADERS = ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'];
 
 beforeAll(async () => {
+  mockSpreadsheetsGet.mockResolvedValue({ data: { sheets: [
+    { properties: { title: 'fetched_posts' } },
+    { properties: { title: 'job_matches' } },
+    { properties: { title: 'fetched_jobs' } },
+  ] } });
   mockValuesGet
     .mockResolvedValueOnce(mockSheet(FETCHED_HEADERS))
-    .mockResolvedValueOnce(mockSheet(JOB_HEADERS));
+    .mockResolvedValueOnce(mockSheet(JOB_HEADERS))
+    .mockResolvedValueOnce(mockSheet(FETCHED_JOB_HEADERS));
   sheets = require('../sheets');
   await sheets.initSheets();
+  ({ saveFetchedJob, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs } = sheets);
 });
 
 beforeEach(() => {
@@ -307,6 +317,62 @@ test('getCandidatePayments joins candidate_name and candidate_emails', async () 
   const payments = await sheets.getCandidatePayments();
   expect(payments[0].candidate_name).toBe('John Dev');
   expect(payments[0].candidate_emails).toBe('john@dev.com');
+});
+
+// ── fetched_jobs ──────────────────────────────────────────────────────────────
+
+describe('saveFetchedJob / getFetchedJobs / getFetchedJob', () => {
+  const job = { jobId: 'adzuna_abc', jobTitle: 'DevOps Engineer', company: 'Razorpay', location: 'Bangalore', jobUrl: 'https://adzuna.com/1', snippet: 'K8s required.' };
+
+  beforeEach(() => {
+    _clearSeenFetchedJobs();
+    mockValuesGet.mockResolvedValue({ data: { values: [
+      ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'],
+    ] } });
+    mockValuesAppend.mockResolvedValue({});
+  });
+
+  test('saveFetchedJob appends a new job', async () => {
+    await saveFetchedJob(job);
+    expect(mockValuesAppend).toHaveBeenCalledWith(
+      expect.objectContaining({ range: 'fetched_jobs' })
+    );
+  });
+
+  test('saveFetchedJob deduplicates by jobId', async () => {
+    await saveFetchedJob(job);
+    await saveFetchedJob(job);
+    expect(mockValuesAppend).toHaveBeenCalledTimes(1);
+  });
+
+  test('getFetchedJobs returns rows sorted by id desc', async () => {
+    mockValuesGet.mockResolvedValue({ data: { values: [
+      ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'],
+      ['1','adzuna_a','Job A','Co A','Delhi','http://a','snippet a','2026-01-01T00:00:00Z'],
+      ['2','adzuna_b','Job B','Co B','Mumbai','http://b','snippet b','2026-01-02T00:00:00Z'],
+    ] } });
+    const jobs = await getFetchedJobs();
+    expect(jobs[0].id).toBe('2');
+    expect(jobs[1].id).toBe('1');
+  });
+
+  test('getFetchedJob returns the matching row', async () => {
+    mockValuesGet.mockResolvedValue({ data: { values: [
+      ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'],
+      ['5','adzuna_xyz','React Dev','Startup','Pune','http://x','React needed','2026-01-01T00:00:00Z'],
+    ] } });
+    const j = await getFetchedJob(5);
+    expect(j.job_title).toBe('React Dev');
+    expect(j.job_id).toBe('adzuna_xyz');
+  });
+
+  test('getFetchedJob returns null when not found', async () => {
+    mockValuesGet.mockResolvedValue({ data: { values: [
+      ['id','job_id','job_title','company','location','job_url','snippet','fetched_at'],
+    ] } });
+    const j = await getFetchedJob(999);
+    expect(j).toBeNull();
+  });
 });
 
 // ─── Cleanup ───────────────────────────────────────────────────────────────────

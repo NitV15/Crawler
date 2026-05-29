@@ -73,6 +73,54 @@ async function sendPaymentRejectedEmail(dealer) {
   });
 }
 
+function buildExpiryWarningText(dealer, paymentLink) {
+  return `Hi ${dealer.name},
+
+Your lead subscription expires in 3 days.
+
+Renew now to keep receiving unlimited leads without interruption.
+
+Renew here: ${paymentLink}
+
+---
+Crawler — Lead Discovery System`;
+}
+
+function buildExpiredText(dealer, paymentLink) {
+  return `Hi ${dealer.name},
+
+Your lead subscription has expired. You are now back on the free tier (2 leads).
+
+Renew to continue receiving unlimited leads.
+
+Renew here: ${paymentLink}
+
+---
+Crawler — Lead Discovery System`;
+}
+
+async function sendSubscriptionExpiryWarningEmail(dealer, paymentLink) {
+  const transport = createTransport();
+  const emails = dealer.emails.split(',').map(e => e.trim());
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to: emails.join(', '),
+    subject: 'Your lead subscription expires in 3 days — renew now',
+    text: buildExpiryWarningText(dealer, paymentLink),
+  });
+}
+
+async function sendSubscriptionExpiredEmail(dealer, paymentLink) {
+  const transport = createTransport();
+  const emails = dealer.emails.split(',').map(e => e.trim());
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to: emails.join(', '),
+    subject: 'Your lead subscription has expired',
+    text: buildExpiredText(dealer, paymentLink),
+  });
+}
+
 function buildJobAlertText({ candidate, job, suggestedTip, includeSubscribeFooter = false, paymentLink = '' }) {
   let text = `Hi ${candidate.name},
 
@@ -139,4 +187,59 @@ async function sendCandidatePaymentRejectedEmail(candidate) {
   });
 }
 
-module.exports = { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail, buildEmailText, sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail };
+function buildCandidateExpiryWarningText(candidate, paymentLink) {
+  return `Hi ${candidate.name},
+
+Your job alerts subscription expires in 3 days.
+
+Renew now to keep receiving unlimited job alerts without interruption.
+
+Renew here: ${paymentLink}
+
+---
+Job Alerts — Powered by Basiq360`;
+}
+
+function buildCandidateExpiredText(candidate, paymentLink) {
+  return `Hi ${candidate.name},
+
+Your job alerts subscription has expired. You are now back on the free tier (2 alerts).
+
+Renew to continue receiving unlimited job alerts.
+
+Renew here: ${paymentLink}
+
+---
+Job Alerts — Powered by Basiq360`;
+}
+
+async function sendCandidateExpiryWarningEmail(candidate, paymentLink) {
+  const transport = createTransport();
+  const emails = candidate.emails.split(',').map(e => e.trim());
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to: emails.join(', '),
+    subject: 'Your job alerts subscription expires in 3 days — renew now',
+    text: buildCandidateExpiryWarningText(candidate, paymentLink),
+  });
+}
+
+async function sendCandidateExpiredEmail(candidate, paymentLink) {
+  const transport = createTransport();
+  const emails = candidate.emails.split(',').map(e => e.trim());
+  await transport.sendMail({
+    from: process.env.SMTP_USER,
+    to: emails.join(', '),
+    subject: 'Your job alerts subscription has expired',
+    text: buildCandidateExpiredText(candidate, paymentLink),
+  });
+}
+
+module.exports = {
+  sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail, buildEmailText,
+  sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail,
+  buildExpiryWarningText, buildExpiredText,
+  sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail,
+  sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail,
+  buildCandidateExpiryWarningText, buildCandidateExpiredText,
+};

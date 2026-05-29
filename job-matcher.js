@@ -42,15 +42,21 @@ PAIRS:
 ${JSON.stringify(pairList)}`;
 
   async function callGemini() {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Gemini timeout after 30s')), 30000)
-    );
-    const result = await Promise.race([
-      ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt }),
-      timeoutPromise,
-    ]);
-    const text = result.text.trim().replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
-    return JSON.parse(text);
+    let timerId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => reject(new Error('Gemini timeout after 30s')), 30000);
+    });
+    const geminiPromise = ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+    geminiPromise.catch(() => {}); // suppress unhandled rejection if timeout wins
+    try {
+      const result = await Promise.race([geminiPromise, timeoutPromise]);
+      clearTimeout(timerId);
+      const text = result.text.trim().replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
+      return JSON.parse(text);
+    } catch (err) {
+      clearTimeout(timerId);
+      throw err;
+    }
   }
 
   try {

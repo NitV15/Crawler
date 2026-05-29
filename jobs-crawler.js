@@ -147,7 +147,10 @@ async function startJobsCrawler() {
   console.log('[jobs] Starting continuous loop...');
   while (jobsCrawlerState.running) {
     try {
-      await runJobsCycle();
+      const cycleTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Cycle timeout — exceeded 90s')), 90000)
+      );
+      await Promise.race([runJobsCycle(), cycleTimeout]);
     } catch (err) {
       console.error('[jobs] Cycle error:', err.message);
     }

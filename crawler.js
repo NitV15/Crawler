@@ -11,6 +11,8 @@ const BATCH_SIZE = 200;
 const CYCLE_WAIT_MS = 2 * 60 * 1000;
 const POST_LIMIT = 25;
 const USER_AGENT = process.env.REDDIT_USER_AGENT || 'web:crawler-bot:1.0 (by /u/crawler_bot)';
+const warnedDealers = new Set();
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 let redditToken = null;
 let redditTokenExpiry = 0;
@@ -177,6 +179,18 @@ async function runCycle() {
   if (!dealers.length) {
     crawlerState.currentSource = 'Waiting - no dealers';
     return;
+  }
+
+  const now = Date.now();
+  const BASE_URL_WARN = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  for (const dealer of dealers) {
+    if (dealer.subscription_status !== 'active' || !dealer.subscription_expires_at) continue;
+    const expiresAt = new Date(dealer.subscription_expires_at).getTime();
+    if (expiresAt > now && expiresAt <= now + THREE_DAYS_MS && !warnedDealers.has(String(dealer.id))) {
+      warnedDealers.add(String(dealer.id));
+      sendSubscriptionExpiryWarningEmail(dealer, `${BASE_URL_WARN}/pay?dealer_id=${dealer.id}`)
+        .catch(err => console.error(`[crawler] Warning email failed for ${dealer.name}: ${err.message}`));
+    }
   }
 
   const fiveDaysAgo = Date.now() / 1000 - 5 * 86400;

@@ -105,6 +105,25 @@ describe('expiry email', () => {
       expect.stringContaining('/pay?dealer_id=1')
     );
   });
+
+  test('sends warning email when subscription expires within 3 days', async () => {
+    const soonExpiring = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(); // 2 days from now
+    const warnDealer = { ...freeDealer, id: 2, subscription_status: 'active', subscription_expires_at: soonExpiring };
+    sheets.getActiveDealers.mockResolvedValue([warnDealer]);
+    sheets.getDealer.mockResolvedValue(warnDealer);
+    processPostBatch.mockResolvedValue([]);
+    mockFetch([]);
+
+    startCrawler();
+    await new Promise(r => setTimeout(r, 100));
+    stopCrawler();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(sendSubscriptionExpiryWarningEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 2 }),
+      expect.stringContaining('/pay?dealer_id=2')
+    );
+  });
 });
 
 describe('getCrawlerStatus', () => {

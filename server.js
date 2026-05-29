@@ -32,6 +32,10 @@ function createApp() {
       HAS_CREDENTIALS_JSON: !!process.env.GOOGLE_CREDENTIALS_JSON,
       HAS_CREDENTIALS_PATH: !!process.env.GOOGLE_CREDENTIALS_PATH,
       NODE_ENV: process.env.NODE_ENV || 'not set',
+      HAS_GEMINI_KEY: !!process.env.GEMINI_API_KEY,
+      HAS_ANTHROPIC_KEY: !!process.env.ANTHROPIC_API_KEY,
+      HAS_ADZUNA: !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
+      HAS_SMTP: !!process.env.SMTP_USER,
     });
   });
 

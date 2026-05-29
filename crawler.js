@@ -182,13 +182,13 @@ async function runCycle() {
   }
 
   const now = Date.now();
-  const BASE_URL_WARN = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   for (const dealer of dealers) {
     if (dealer.subscription_status !== 'active' || !dealer.subscription_expires_at) continue;
     const expiresAt = new Date(dealer.subscription_expires_at).getTime();
     if (expiresAt > now && expiresAt <= now + THREE_DAYS_MS && !warnedDealers.has(String(dealer.id))) {
       warnedDealers.add(String(dealer.id));
-      sendSubscriptionExpiryWarningEmail(dealer, `${BASE_URL_WARN}/pay?dealer_id=${dealer.id}`)
+      sendSubscriptionExpiryWarningEmail(dealer, `${BASE_URL}/pay?dealer_id=${dealer.id}`)
         .catch(err => console.error(`[crawler] Warning email failed for ${dealer.name}: ${err.message}`));
     }
   }
@@ -283,4 +283,4 @@ async function startCrawler() {
   console.log('[crawler] Stopped.');
 }
 
-module.exports = { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription };
+module.exports = { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription, _clearWarnedDealers: () => warnedDealers.clear() };

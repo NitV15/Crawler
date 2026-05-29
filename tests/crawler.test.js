@@ -5,7 +5,7 @@ jest.mock('../prefilter');
 jest.mock('../subreddits');
 jest.mock('../instagram-fetcher');
 
-const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('../crawler');
+const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription, _clearWarnedDealers } = require('../crawler');
 const sheets = require('../sheets');
 const { processPostBatch } = require('../matcher');
 const { sendLeadEmail, sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail } = require('../mailer');
@@ -39,6 +39,7 @@ function mockFetch(posts) {
 }
 
 beforeEach(() => {
+  _clearWarnedDealers();
   jest.clearAllMocks();
   sheets.getActiveDealers.mockResolvedValue([freeDealer]);
   sheets.getDealer.mockResolvedValue(freeDealer);

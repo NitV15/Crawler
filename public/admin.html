@@ -775,6 +775,7 @@ function renderCandidates() {
       <td><span class="badge badge-${c.subscription_status==='active'?'active':'free'}">${c.subscription_status==='active'?'Active':'Free'}</span></td>
       <td>${c.subscription_expires_at ? c.subscription_expires_at.slice(0,10) : '—'}</td>
       <td>
+        <button class="action btn-edit" onclick="openCandidateEditModal(${c.id})">Edit</button>
         ${c.subscription_status==='active'
           ? `<button class="action btn-sub-stop" onclick="candidateResetSub(${c.id})">Stop Sub</button>`
           : `<button class="action btn-sub-start" onclick="candidateActivateSub(${c.id})">Activate Sub</button>`}
@@ -800,6 +801,63 @@ async function candidateResetSub(id) {
   if (!confirm('Stop subscription for this candidate? Resets them to free tier.')) return;
   await fetch(`/api/candidates/${id}/reset-subscription`, { method: 'POST' });
   loadCandidates();
+}
+
+// ── Edit Candidate Modal ──────────────────────────────────────────────────────
+
+let editingCandidateId = null;
+
+function openCandidateEditModal(id) {
+  const c = allCandidates.find(x => String(x.id) === String(id));
+  if (!c) return;
+  editingCandidateId = id;
+  document.getElementById('cedit-name').value = c.name || '';
+  document.getElementById('cedit-emails').value = c.emails || '';
+  document.getElementById('cedit-role').value = c.role || '';
+  document.getElementById('cedit-skills').value = c.skills || '';
+  document.getElementById('cedit-experience_level').value = c.experience_level || '';
+  document.getElementById('cedit-city').value = c.city || '';
+  document.getElementById('cedit-state').value = c.state || '';
+  document.getElementById('cedit-preferred_locations').value = c.preferred_locations || '';
+  openModalAnimated('editCandidateModal');
+}
+
+function closeCandidateEditModal() {
+  closeModalAnimated('editCandidateModal', () => { editingCandidateId = null; });
+}
+
+async function saveCandidate() {
+  if (!editingCandidateId) return;
+  const body = {
+    name: document.getElementById('cedit-name').value.trim(),
+    emails: document.getElementById('cedit-emails').value.trim(),
+    role: document.getElementById('cedit-role').value.trim(),
+    skills: document.getElementById('cedit-skills').value.trim(),
+    experience_level: document.getElementById('cedit-experience_level').value.trim(),
+    city: document.getElementById('cedit-city').value.trim(),
+    state: document.getElementById('cedit-state').value.trim(),
+    preferred_locations: document.getElementById('cedit-preferred_locations').value.trim(),
+  };
+  if (!body.name || !body.emails || !body.role) {
+    alert('Name, emails, and role are required.');
+    return;
+  }
+  const btn = document.getElementById('editCandidateSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await fetch(`/api/candidates/${editingCandidateId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) { closeCandidateEditModal(); loadCandidates(); }
+    else alert('Error: ' + data.error);
+  } catch (e) {
+    alert('Failed to save. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
 }
 
 // ── Job Matches Tab ────────────────────────────────────────────────────────────
@@ -936,7 +994,7 @@ function clearLogs() {
 let editingDealerId = null;
 
 function openEditModal(id) {
-  const d = allDealers.find(x => x.id === id);
+  const d = allDealers.find(x => String(x.id) === String(id));
   if (!d) return;
   editingDealerId = id;
   document.getElementById('edit-name').value = d.name || '';
@@ -1061,6 +1119,26 @@ function stopCrawlerGlow() {
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
       <button class="btn-save" id="editSaveBtn" onclick="saveDealer()">Save</button>
+    </div>
+  </div>
+</div>
+<!-- Edit Candidate Modal -->
+<div id="editCandidateModal" class="modal-overlay" onclick="if(event.target===this)closeCandidateEditModal()">
+  <div class="modal-box">
+    <h3>Edit Candidate</h3>
+    <div class="modal-grid">
+      <label class="full">Name <input id="cedit-name" type="text"></label>
+      <label class="full">Emails (comma-separated) <input id="cedit-emails" type="text"></label>
+      <label class="full">Job Role / Title <input id="cedit-role" type="text"></label>
+      <label class="full">Skills <textarea id="cedit-skills"></textarea></label>
+      <label class="full">Experience Level <input id="cedit-experience_level" type="text" placeholder="e.g. 1-3 yr, 3-5 yr, 5+ yr"></label>
+      <label>City <input id="cedit-city" type="text"></label>
+      <label>State <input id="cedit-state" type="text"></label>
+      <label class="full">Preferred Locations <input id="cedit-preferred_locations" type="text" placeholder="e.g. Remote, Noida, Hyderabad"></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCandidateEditModal()">Cancel</button>
+      <button class="btn-save" id="editCandidateSaveBtn" onclick="saveCandidate()">Save</button>
     </div>
   </div>
 </div>

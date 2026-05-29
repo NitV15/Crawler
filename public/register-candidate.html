@@ -74,7 +74,8 @@
         const json = await res.json();
         if (json.success) {
           msg.className = 'success';
-          msg.textContent = 'You\'re registered! Job alerts will be sent to your email.';
+          msg.innerHTML = `You're registered! You'll get <strong>2 free job alerts</strong> to start.<br><br>
+            Want unlimited alerts? <a href="/candidate-pay?candidate_id=${json.candidate_id}" style="color:#1a73e8;font-weight:bold;">Subscribe for ₹10/month →</a>`;
           msg.style.display = 'block';
           e.target.reset();
         } else {

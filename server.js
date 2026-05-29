@@ -49,8 +49,8 @@ function createApp() {
       return res.status(400).json({ error: 'Required: name, emails, industry_category, services, keywords, state, city' });
     }
     try {
-      await addDealer({ name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
-      res.json({ success: true });
+      const dealerId = await addDealer({ name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
+      res.json({ success: true, dealer_id: dealerId });
     } catch (err) {
       res.status(500).json({ error: 'Failed to register dealer' });
     }
@@ -339,8 +339,8 @@ function createApp() {
       return res.status(400).json({ error: 'Required: name, emails, role, skills, city' });
     }
     try {
-      await addCandidate({ name, emails, role, skills, experience_level, city, state, preferred_locations });
-      res.json({ success: true });
+      const candidateId = await addCandidate({ name, emails, role, skills, experience_level, city, state, preferred_locations });
+      res.json({ success: true, candidate_id: candidateId });
     } catch (err) {
       res.status(500).json({ error: 'Failed to register candidate' });
     }

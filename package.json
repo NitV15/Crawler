@@ -8,6 +8,7 @@
   "main": "server.js",
   "scripts": {
     "build": "pip install -r requirements.txt || true",
+    "postinstall": "pip install -r requirements.txt || true",
     "start": "node server.js",
     "crawl": "node -e \"require('./crawler').runCrawl()\"",
     "test": "jest --runInBand"

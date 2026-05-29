@@ -3,9 +3,11 @@ const { getActiveCandidates, getCandidate, saveJobMatch, incrementCandidateLeadC
         resetCandidateSubscription, isSeenJob, markJobSeen } = require('./sheets');
 const { fetchIndeedJobs } = require('./indeed-fetcher');
 const { processJobBatch } = require('./job-matcher');
-const { sendJobAlertEmail } = require('./mailer');
+const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('./mailer');
 
 const CYCLE_WAIT_MS = 5 * 60 * 1000;
+const warnedCandidates = new Set();
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 const jobsCrawlerState = {
   running: false,
@@ -43,6 +45,18 @@ async function runJobsCycle() {
     return;
   }
 
+  const now = Date.now();
+  const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  for (const candidate of candidates) {
+    if (candidate.subscription_status !== 'active' || !candidate.subscription_expires_at) continue;
+    const expiresAt = new Date(candidate.subscription_expires_at).getTime();
+    if (expiresAt > now && expiresAt <= now + THREE_DAYS_MS && !warnedCandidates.has(String(candidate.id))) {
+      warnedCandidates.add(String(candidate.id));
+      sendCandidateExpiryWarningEmail(candidate, `${BASE_URL}/candidate-pay?candidate_id=${candidate.id}`)
+        .catch(err => console.error(`[jobs] Warning email failed for ${candidate.name}: ${err.message}`));
+    }
+  }
+
   const threeDaysAgo = Date.now() / 1000 - 3 * 86400;
   const seenThisCycle = new Set();
   const buffer = [];
@@ -76,7 +90,6 @@ async function runJobsCycle() {
   if (!buffer.length) return;
 
   jobsCrawlerState.currentCandidate = 'Processing batch';
-  const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   const results = await processJobBatch(buffer);
   if (results.length < buffer.length) {
     console.warn(`[jobs] Batch returned ${results.length}/${buffer.length} results — some pairs may be unscored`);
@@ -91,7 +104,12 @@ async function runJobsCycle() {
     if (!freshCandidate) continue;
 
     const action = checkCandidateSubscription(freshCandidate);
-    if (action === 'expired') { await resetCandidateSubscription(freshCandidate.id); continue; }
+    if (action === 'expired') {
+      await resetCandidateSubscription(freshCandidate.id);
+      sendCandidateExpiredEmail(freshCandidate, `${BASE_URL}/candidate-pay?candidate_id=${freshCandidate.id}`)
+        .catch(err => console.error(`[jobs] Expiry email failed for ${freshCandidate.name}: ${err.message}`));
+      continue;
+    }
     if (action === 'skip') continue;
 
     await saveJobMatch({
@@ -142,4 +160,4 @@ async function startJobsCrawler() {
   console.log('[jobs] Stopped.');
 }
 
-module.exports = { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription };
+module.exports = { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription, _clearWarnedCandidates: () => warnedCandidates.clear() };

@@ -3,11 +3,11 @@ jest.mock('../indeed-fetcher');
 jest.mock('../job-matcher');
 jest.mock('../mailer');
 
-const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('../jobs-crawler');
+const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription, _clearWarnedCandidates } = require('../jobs-crawler');
 const sheets = require('../sheets');
 const { fetchIndeedJobs } = require('../indeed-fetcher');
 const { processJobBatch } = require('../job-matcher');
-const { sendJobAlertEmail } = require('../mailer');
+const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('../mailer');
 
 const freeCandidate = {
   id: 1, name: 'Raj Kumar', emails: 'raj@test.com',
@@ -25,6 +25,9 @@ const fakeJob = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  _clearWarnedCandidates();
+  sendCandidateExpiryWarningEmail.mockResolvedValue();
+  sendCandidateExpiredEmail.mockResolvedValue();
   sheets.getActiveCandidates.mockResolvedValue([freeCandidate]);
   sheets.getCandidate.mockResolvedValue(freeCandidate);
   sheets.saveJobMatch.mockResolvedValue();
@@ -115,4 +118,57 @@ test('startJobsCrawler sends with footer when lead_count=1', async () => {
   });
   await startJobsCrawler();
   expect(sendJobAlertEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: true }));
+});
+
+describe('candidate expiry notifications', () => {
+  test('sends expiry email when candidate subscription is expired', async () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    const expiredCandidate = {
+      id: 99, name: 'Expired Cand', emails: 'exp@test.com', role: 'Developer',
+      skills: 'JS', experience_level: '1-3 yr', city: 'Delhi', state: 'Delhi',
+      preferred_locations: '', lead_count: '0',
+      subscription_status: 'active', subscription_expires_at: past, active: '1',
+    };
+    sheets.getActiveCandidates.mockResolvedValue([expiredCandidate]);
+    sheets.getCandidate.mockResolvedValue(expiredCandidate);
+    sheets.resetCandidateSubscription.mockResolvedValue();
+    processJobBatch.mockImplementation(async () => {
+      stopJobsCrawler();
+      return [{ index: 0, is_relevant: true, suggested_tip: 'Good luck.' }];
+    });
+    fetchIndeedJobs.mockResolvedValue([fakeJob]);
+
+    await startJobsCrawler();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(sheets.resetCandidateSubscription).toHaveBeenCalledWith(99);
+    expect(sendCandidateExpiredEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 99 }),
+      expect.stringContaining('/candidate-pay?candidate_id=99')
+    );
+  });
+
+  test('sends warning email when candidate subscription expires within 3 days', async () => {
+    const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    const warnCandidate = {
+      id: 88, name: 'Warn Cand', emails: 'warn@test.com', role: 'Designer',
+      skills: 'Figma', experience_level: '3-5 yr', city: 'Mumbai', state: 'Maharashtra',
+      preferred_locations: '', lead_count: '0',
+      subscription_status: 'active', subscription_expires_at: soon, active: '1',
+    };
+    sheets.getActiveCandidates.mockResolvedValue([warnCandidate]);
+    sheets.getCandidate.mockResolvedValue(warnCandidate);
+    fetchIndeedJobs.mockResolvedValue([]);
+    processJobBatch.mockResolvedValue([]);
+
+    startJobsCrawler();
+    await new Promise(r => setTimeout(r, 200));
+    stopJobsCrawler();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(sendCandidateExpiryWarningEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 88 }),
+      expect.stringContaining('/candidate-pay?candidate_id=88')
+    );
+  });
 });

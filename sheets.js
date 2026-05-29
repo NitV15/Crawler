@@ -112,8 +112,12 @@ async function initSheets() {
     console.warn('[sheets] Could not check/create fetched_jobs tab:', e.message);
   }
 
-  const fetchedJobRows = await readSheet('fetched_jobs');
-  fetchedJobRows.forEach(r => r.job_id && seenFetchedJobs.add(r.job_id));
+  try {
+    const fetchedJobRows = await readSheet('fetched_jobs');
+    fetchedJobRows.forEach(r => r.job_id && seenFetchedJobs.add(r.job_id));
+  } catch (e) {
+    console.warn('[sheets] Could not load fetched_jobs rows:', e.message);
+  }
   console.log(`[sheets] Connected. seenPosts=${seenPosts.size}, seenJobs=${seenJobs.size}, seenFetchedJobs=${seenFetchedJobs.size}`);
 }
 

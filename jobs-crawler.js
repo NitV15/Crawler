@@ -81,8 +81,7 @@ async function runJobsCycle() {
         seenThisCycle.add(job.job_id);
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
-        saveFetchedJob({ jobId: job.job_id, jobTitle: job.title, company: job.company, location: job.location, jobUrl: job.url, snippet: job.snippet })
-          .catch(err => console.error(`[jobs] saveFetchedJob failed: ${err.message}`));
+        await saveFetchedJob({ jobId: job.job_id, jobTitle: job.title, company: job.company, location: job.location, jobUrl: job.url, snippet: job.snippet });
       }
     } catch (err) {
       console.error(`[jobs] ${candidate.name} fetch failed: ${err.message}`);

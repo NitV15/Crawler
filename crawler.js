@@ -4,7 +4,7 @@ const { getActiveDealers, getDealer, saveLead, incrementDealerLeadCount,
 const { shouldCheckPost } = require('./prefilter');
 const { buildSubredditList } = require('./subreddits');
 const { processPostBatch } = require('./matcher');
-const { sendLeadEmail } = require('./mailer');
+const { sendLeadEmail, sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail } = require('./mailer');
 const { fetchInstagramLeads } = require('./instagram-fetcher');
 
 const BATCH_SIZE = 200;
@@ -124,6 +124,8 @@ async function processBatch(buffer) {
 
       if (action === 'expired') {
         await resetDealerSubscription(dealerId);
+        sendSubscriptionExpiredEmail(dealer, `${BASE_URL}/pay?dealer_id=${dealer.id}`)
+          .catch(err => console.error(`[crawler] Expiry email failed for ${dealer.name}: ${err.message}`));
         await saveLead({
           dealerId: null, redditPostId: post.post_id, postTitle: post.title,
           postText: post.text.slice(0, 500), postUrl: post.url, subreddit: post.subreddit,
@@ -181,9 +183,11 @@ async function runCycle() {
   const seenThisCycle = new Set();
   const buffer = [];
 
+  let rateLimited = false;
   for (const sub of buildSubredditList(dealers)) {
     if (!crawlerState.running) break;
     if (buffer.length >= BATCH_SIZE) break;
+    if (rateLimited) break;
     crawlerState.currentSource = `r/${sub}`;
     try {
       const posts = await fetchSubredditPosts(sub);
@@ -197,8 +201,16 @@ async function runCycle() {
         await saveFetchedPost({ postId: post.post_id, postTitle: post.title, postText: post.text, postUrl: post.url, subreddit: post.subreddit });
       }
     } catch (err) {
-      console.error(`[crawler] r/${sub} failed: ${err.message}`);
+      if (err.message.includes('429')) {
+        console.warn(`[crawler] r/${sub} rate limited — stopping cycle, waiting longer`);
+        crawlerState.currentSource = 'Rate limited — backing off';
+        await new Promise(r => setTimeout(r, 60000));
+        rateLimited = true;
+      } else if (!err.message.includes('403')) {
+        console.error(`[crawler] r/${sub} failed: ${err.message}`);
+      }
     }
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   if (crawlerState.running && buffer.length < BATCH_SIZE) {

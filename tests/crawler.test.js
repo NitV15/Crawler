@@ -8,7 +8,7 @@ jest.mock('../instagram-fetcher');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('../crawler');
 const sheets = require('../sheets');
 const { processPostBatch } = require('../matcher');
-const { sendLeadEmail } = require('../mailer');
+const { sendLeadEmail, sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail } = require('../mailer');
 const { shouldCheckPost } = require('../prefilter');
 const { buildSubredditList } = require('../subreddits');
 const { fetchInstagramLeads } = require('../instagram-fetcher');
@@ -48,6 +48,8 @@ beforeEach(() => {
   sheets.resetDealerSubscription.mockResolvedValue();
   sheets.isSeenPost.mockReturnValue(false);
   sendLeadEmail.mockResolvedValue();
+  sendSubscriptionExpiryWarningEmail.mockResolvedValue();
+  sendSubscriptionExpiredEmail.mockResolvedValue();
   shouldCheckPost.mockReturnValue(true);
   buildSubredditList.mockReturnValue(['india']);
   processPostBatch.mockResolvedValue([]);
@@ -74,6 +76,34 @@ describe('checkSubscription', () => {
   test('returns expired for active but expired subscription', () => {
     const past = new Date(Date.now() - 86400000).toISOString();
     expect(checkSubscription({ lead_count: 5, subscription_status: 'active', subscription_expires_at: past })).toBe('expired');
+  });
+});
+
+describe('expiry email', () => {
+  test('sends expiry email when subscription is expired', async () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    const expiredDealer = { ...freeDealer, id: 1, subscription_status: 'active', subscription_expires_at: past, lead_count: 0 };
+    sheets.getActiveDealers.mockResolvedValue([expiredDealer]);
+    sheets.getDealer.mockResolvedValue(expiredDealer);
+    sheets.resetDealerSubscription.mockResolvedValue();
+    mockFetch([{ id: 'abc', title: 'Need a car', text: 'looking to buy', created_utc: Math.floor(Date.now() / 1000) }]);
+    processPostBatch.mockImplementation(async (posts) => {
+      stopCrawler();
+      return [{
+        post_id: 'reddit_abc', is_lead: true, is_hiring_post: false,
+        matched_dealer_ids: [1], lead_category: 'Automotive',
+        suggested_reply: 'reply', what_to_sell: 'car', post_location: 'Delhi',
+      }];
+    });
+
+    await startCrawler();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(sheets.resetDealerSubscription).toHaveBeenCalledWith(1);
+    expect(sendSubscriptionExpiredEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1 }),
+      expect.stringContaining('/pay?dealer_id=1')
+    );
   });
 });
 

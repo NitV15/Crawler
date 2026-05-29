@@ -73,7 +73,7 @@ async function sendPaymentRejectedEmail(dealer) {
   });
 }
 
-function buildExpiryWarningText(dealer, paymentLink) {
+function buildExpiryWarningText(dealer, paymentLink = '') {
   return `Hi ${dealer.name},
 
 Your lead subscription expires in 3 days.
@@ -86,7 +86,7 @@ Renew here: ${paymentLink}
 Crawler — Lead Discovery System`;
 }
 
-function buildExpiredText(dealer, paymentLink) {
+function buildExpiredText(dealer, paymentLink = '') {
   return `Hi ${dealer.name},
 
 Your lead subscription has expired. You are now back on the free tier (2 leads).
@@ -187,7 +187,7 @@ async function sendCandidatePaymentRejectedEmail(candidate) {
   });
 }
 
-function buildCandidateExpiryWarningText(candidate, paymentLink) {
+function buildCandidateExpiryWarningText(candidate, paymentLink = '') {
   return `Hi ${candidate.name},
 
 Your job alerts subscription expires in 3 days.
@@ -200,7 +200,7 @@ Renew here: ${paymentLink}
 Job Alerts — Powered by Basiq360`;
 }
 
-function buildCandidateExpiredText(candidate, paymentLink) {
+function buildCandidateExpiredText(candidate, paymentLink = '') {
   return `Hi ${candidate.name},
 
 Your job alerts subscription has expired. You are now back on the free tier (2 alerts).

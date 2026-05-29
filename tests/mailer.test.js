@@ -1,4 +1,10 @@
-const { buildEmailText } = require('../mailer');
+const {
+  buildEmailText,
+  buildExpiryWarningText,
+  buildExpiredText,
+  buildCandidateExpiryWarningText,
+  buildCandidateExpiredText,
+} = require('../mailer');
 
 const dealer = { name: 'Test Co', emails: 'a@b.com', industry_category: 'Furniture & Home Decor' };
 const post = { title: 'Need wardrobe', text: '', subreddit: 'Faridabad', url: 'http://reddit.com/x', whatToSell: 'modular wardrobe' };
@@ -27,13 +33,6 @@ test('buildEmailText includes what_to_sell from post', () => {
   const text = buildEmailText({ dealer, post, suggestedReply: 'Hi!', includeSubscribeFooter: false });
   expect(text).toContain('modular wardrobe');
 });
-
-const {
-  buildExpiryWarningText,
-  buildExpiredText,
-  buildCandidateExpiryWarningText,
-  buildCandidateExpiredText,
-} = require('../mailer');
 
 const candidate = { name: 'Raj Kumar', emails: 'raj@gmail.com' };
 

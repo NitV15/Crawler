@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect Market — Leads for Dealers · Jobs for Candidates</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #fff; color: #333; min-height: 100vh; display: flex; flex-direction: column; }
+
+    nav {
+      background: #1565c0;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    nav .brand { color: #fff; font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
+    nav .tagline { color: #bbdefb; font-size: 12px; }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      text-align: center;
+    }
+
+    h1 { font-size: 32px; color: #1565c0; font-weight: 800; margin-bottom: 10px; }
+    .subtitle { font-size: 15px; color: #666; margin-bottom: 40px; }
+
+    .cards {
+      display: flex;
+      gap: 24px;
+      max-width: 560px;
+      width: 100%;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      flex: 1;
+      border-radius: 14px;
+      padding: 28px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card.dealer { border: 2px solid #1565c0; }
+    .card.candidate { border: 2px solid #2e7d32; }
+
+    .card .icon { font-size: 40px; margin-bottom: 12px; }
+    .card h2 { font-size: 16px; margin-bottom: 8px; }
+    .card.dealer h2 { color: #1565c0; }
+    .card.candidate h2 { color: #2e7d32; }
+
+    .card p { font-size: 12px; color: #666; line-height: 1.6; margin-bottom: 16px; flex: 1; }
+    .card .price { font-size: 11px; font-weight: bold; margin-bottom: 16px; }
+    .card.dealer .price { color: #1565c0; }
+    .card.candidate .price { color: #2e7d32; }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 11px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #fff;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .card.dealer .btn { background: #1565c0; }
+    .card.candidate .btn { background: #2e7d32; }
+
+    .note { font-size: 11px; color: #aaa; }
+
+    footer {
+      background: #1565c0;
+      padding: 14px 32px;
+      text-align: center;
+      color: #bbdefb;
+      font-size: 11px;
+    }
+
+    @media (max-width: 480px) {
+      .cards { flex-direction: column; }
+      nav .tagline { display: none; }
+      h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <span class="brand">Connect Market</span>
+    <span class="tagline">Leads for Dealers · Jobs for Candidates</span>
+  </nav>
+
+  <main>
+    <h1>Find Leads. Find Jobs.</h1>
+    <p class="subtitle">AI-powered matching — delivered to your inbox. Start for free.</p>
+
+    <div class="cards">
+      <div class="card dealer">
+        <div class="icon">🏪</div>
+        <h2>I'm a Dealer</h2>
+        <p>Get buyer leads matching your business, city &amp; category</p>
+        <div class="price">2 free leads · ₹10/month unlimited</div>
+        <a href="/register.html" class="btn">Register Free →</a>
+      </div>
+
+      <div class="card candidate">
+        <div class="icon">💼</div>
+        <h2>I'm a Job Seeker</h2>
+        <p>Get matched job alerts for your role &amp; city in your inbox</p>
+        <div class="price">2 free alerts · ₹10/month unlimited</div>
+        <a href="/register-candidate" class="btn">Register Free →</a>
+      </div>
+    </div>
+
+    <p class="note">✓ No credit card needed &nbsp;·&nbsp; ✓ Cancel anytime &nbsp;·&nbsp; ✓ Email alerts only</p>
+  </main>
+
+  <footer>
+    © 2026 Connect Market · AI-powered · Made for India
+  </footer>
+
+</body>
+</html>

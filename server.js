@@ -25,7 +25,7 @@ function createApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(express.static(path.join(__dirname, 'public')));
-  app.get('/', (req, res) => res.redirect('/admin.html'));
+  app.get('/admin', (req, res) => res.redirect('/admin.html'));
 
   app.get('/api/debug-env', (req, res) => {
     res.json({

@@ -39,6 +39,7 @@ function checkCandidateSubscription(candidate) {
 }
 
 async function runJobsCycle() {
+  console.log('[jobs] cycle: fetching candidates');
   const candidates = await getActiveCandidates();
   if (!candidates.length) {
     jobsCrawlerState.currentCandidate = 'Waiting - no candidates';
@@ -89,8 +90,10 @@ async function runJobsCycle() {
 
   if (!buffer.length) return;
 
+  console.log(`[jobs] cycle: ${buffer.length} jobs in buffer, calling Gemini`);
   jobsCrawlerState.currentCandidate = 'Processing batch';
   const results = await processJobBatch(buffer);
+  console.log(`[jobs] cycle: Gemini returned ${results.length} results`);
   if (results.length < buffer.length) {
     console.warn(`[jobs] Batch returned ${results.length}/${buffer.length} results — some pairs may be unscored`);
   }

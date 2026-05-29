@@ -188,6 +188,7 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div class="tabs">
       <div class="tab" onclick="switchTab('candidates')">👤 Candidates</div>
       <div class="tab" onclick="switchTab('job-matches')">💼 Job Matches</div>
+      <div class="tab" onclick="switchTab('fetched-jobs')">🔍 Fetched Jobs</div>
       <div class="tab" onclick="switchTab('cand-payments')">💳 Cand. Payments</div>
     </div>
     <div class="sidebar-section">System</div>
@@ -212,6 +213,7 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div id="panel-logs" class="panel"></div>
     <div id="panel-candidates" class="panel"></div>
     <div id="panel-job-matches" class="panel"></div>
+    <div id="panel-fetched-jobs" class="panel"></div>
     <div id="panel-cand-payments" class="panel"></div>
   </div>
 </div>
@@ -222,7 +224,7 @@ let allLeadsRaw = [];
 let matchedRaw = [];
 let unmatchedRaw = [];
 
-const TAB_NAMES = ['dealers','payments','total','matched','unmatched','fetched','candidates','job-matches','cand-payments','logs'];
+const TAB_NAMES = ['dealers','payments','total','matched','unmatched','fetched','candidates','job-matches','fetched-jobs','cand-payments','logs'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'dealers';
@@ -241,6 +243,7 @@ function switchTab(name) {
   else if (name === 'logs') initLogs();
   else if (name === 'candidates') loadCandidates();
   else if (name === 'job-matches') loadJobMatches();
+  else if (name === 'fetched-jobs') loadFetchedJobs();
   else if (name === 'cand-payments') loadCandidatePayments();
 }
 
@@ -879,6 +882,67 @@ async function loadJobMatches() {
     </tr>`).join('')}</tbody>
   </table>`;
   animateTableRows(panel);
+}
+
+// ── Fetched Jobs Tab ──────────────────────────────────────────────────────────
+
+async function loadFetchedJobs() {
+  const [jobs, cands] = await Promise.all([
+    fetch('/api/fetched-jobs').then(r => r.json()),
+    allCandidates.length ? Promise.resolve(allCandidates) : fetch('/api/candidates').then(r => r.json()),
+  ]);
+  if (!allCandidates.length) allCandidates = cands;
+  const panel = document.getElementById('panel-fetched-jobs');
+  if (!jobs.length) { panel.innerHTML = '<p>No fetched jobs yet. Start the Jobs crawler first.</p>'; return; }
+  const candidateOpts = allCandidates.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  panel.innerHTML = `<table>
+    <thead><tr>
+      <th>Job Title</th><th>Company</th><th>Location</th><th>Preview</th><th>Fetched</th><th>Send to Candidate</th>
+    </tr></thead>
+    <tbody>${jobs.map(j => `<tr>
+      <td style="max-width:200px"><a href="${safeUrl(j.job_url)}" target="_blank">${esc(j.job_title||'(no title)').slice(0,60)}</a></td>
+      <td>${esc(j.company||'—')}</td>
+      <td>${esc(j.location||'—')}</td>
+      <td style="max-width:180px;font-size:12px;color:var(--text-muted)">${esc(j.snippet||'').slice(0,100)}${(j.snippet||'').length>100?'…':''}</td>
+      <td style="white-space:nowrap">${(j.fetched_at||'').slice(0,16).replace('T',' ')}</td>
+      <td style="white-space:nowrap">
+        <select class="assign" id="fj-cand-${j.id}">
+          <option value="">— Candidate —</option>${candidateOpts}
+        </select>
+        <button class="action btn-send" id="fj-btn-${j.id}" onclick="sendFetchedJob(${j.id})">Send</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+  animateTableRows(panel);
+}
+
+async function sendFetchedJob(jobId) {
+  const candidateId = document.getElementById('fj-cand-' + jobId).value;
+  if (!candidateId) { alert('Please select a candidate first'); return; }
+  const btn = document.getElementById('fj-btn-' + jobId);
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const res = await fetch(`/api/fetched-jobs/${jobId}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ candidate_id: candidateId }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      btn.textContent = 'Sent ✓';
+      btn.style.background = 'var(--green-bg)';
+      btn.style.color = 'var(--green)';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Send';
+      alert('Error: ' + (json.error || 'Unknown error'));
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+    alert('Network error');
+  }
 }
 
 // ── Candidate Payments Tab ─────────────────────────────────────────────────────

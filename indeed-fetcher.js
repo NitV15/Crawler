@@ -16,7 +16,7 @@ async function fetchIndeedJobs(role, skills, city) {
   });
 
   const url = `https://api.adzuna.com/v1/api/jobs/in/search/1?${params}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(`Adzuna API HTTP ${res.status}`);
   const json = await res.json();
 

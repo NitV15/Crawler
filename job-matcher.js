@@ -57,7 +57,8 @@ ${JSON.stringify(pairList)}`;
     const parsed = await callGemini();
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
-    console.error('[job-matcher] Batch failed, retrying:', err.message);
+    console.error('[job-matcher] Batch failed, retrying in 5s:', err.message);
+    await new Promise(r => setTimeout(r, 5000));
     try {
       const parsed = await callGemini();
       return Array.isArray(parsed) ? parsed : [];

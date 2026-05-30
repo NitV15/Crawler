@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dealer Portal — Connect Market</title>
+  <style>
+    :root{--bg:#0f0f23;--card:#13132b;--border:#1e1e45;--text:#e0e0ff;--muted:#7c7caa;--accent:#4f6ef7;--accent-glow:rgba(79,110,247,0.4);--input-bg:#0f0f23;--input-border:#2a2d45;--warn:#f59e0b;--danger:#ef4444;--success:#4ade80;--toggle-inactive:#2a2a50}
+    [data-theme="light"]{--bg:#f0f2fa;--card:#fff;--border:#e5e7eb;--text:#111;--muted:#888;--input-bg:#fff;--input-border:#d1d5db;--toggle-inactive:#e5e7eb}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+    nav{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .brand{font-weight:800;font-size:16px}.brand span{color:var(--muted);font-size:11px;font-weight:400;margin-left:8px}
+    .nav-right{display:flex;align-items:center;gap:12px}
+    .theme-toggle{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 8px;display:flex;gap:6px;align-items:center;cursor:pointer}
+    .theme-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;transition:background .2s}
+    #btn-moon{background:var(--accent)}[data-theme="light"] #btn-moon{background:var(--toggle-inactive)}
+    #btn-sun{background:var(--toggle-inactive)}[data-theme="light"] #btn-sun{background:var(--accent)}
+    .user-menu{position:relative}
+    .user-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
+    .dropdown{position:absolute;right:0;top:calc(100% + 6px);background:var(--card);border:1px solid var(--border);border-radius:10px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:none;z-index:200}
+    .dropdown.open{display:block}
+    .dropdown a{display:block;padding:10px 16px;color:var(--text);font-size:13px;text-decoration:none;cursor:pointer;transition:background .15s}
+    .dropdown a:hover{background:var(--border)}
+    .dropdown a:first-child{border-radius:10px 10px 0 0}.dropdown a:last-child{border-radius:0 0 10px 10px}
+    main{max-width:900px;margin:0 auto;padding:20px 16px}
+    .banner{border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px}
+    .banner.warn{background:#2a1a0a;border:1px solid #5a3a0a}
+    .banner.danger{background:#2a0a0a;border:1px solid #5a1a1a}
+    .banner-text{font-size:13px;font-weight:700}.banner-sub{font-size:11px;margin-top:3px;opacity:.7}
+    .banner.warn .banner-text{color:var(--warn)}.banner.danger .banner-text{color:var(--danger)}
+    .banner-btn{padding:7px 16px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0}
+    .banner.warn .banner-btn{background:var(--warn);color:#000}.banner.danger .banner-btn{background:var(--danger);color:#fff}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px}
+    .stat-label{color:var(--muted);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px}
+    .stat-value{font-size:24px;font-weight:800}
+    .stat-sub{color:var(--muted);font-size:11px;margin-top:2px}
+    .stat-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;margin-top:4px}
+    .badge-active{background:#1a2a1a;color:var(--success)}.badge-expired{background:#2a1a1a;color:var(--danger)}.badge-free{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+    .section-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px}
+    .section-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-weight:700}
+    .lead-row{padding:14px 18px;border-bottom:1px solid var(--border)}
+    .lead-row:last-child{border-bottom:none}
+    .lead-title{font-weight:600;margin-bottom:4px}
+    .lead-meta{color:var(--muted);font-size:11px;margin-bottom:6px}
+    .lead-reply{color:var(--muted);font-size:11px;font-style:italic;margin-bottom:6px}
+    .lead-link{color:var(--accent);font-size:11px;font-weight:600;text-decoration:none}
+    .load-more{width:100%;padding:12px;background:var(--bg);border:none;border-top:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer;transition:background .15s}
+    .load-more:hover{background:var(--border)}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+    .modal-overlay.open{display:flex}
+    .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.5)}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .modal-title{font-weight:700;font-size:15px}
+    .close-btn{background:var(--bg);border:1px solid var(--border);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--muted)}
+    .field{margin-bottom:14px}
+    .field-label{color:var(--muted);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:5px}
+    .field input,.field select,.field textarea{width:100%;background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;transition:border .2s;font-family:inherit}
+    .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+    .field textarea{min-height:70px;resize:vertical}
+    .field-locked{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--muted);font-size:13px;display:flex;justify-content:space-between;align-items:center}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+    .btn-cancel{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer}
+    .btn-save{background:var(--accent);border:none;border-radius:8px;padding:11px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px var(--accent-glow)}
+    .btn-save:hover{opacity:.9}.btn-save:disabled{opacity:.5;cursor:not-allowed}
+    .success-msg{color:var(--success);font-size:12px;margin-top:8px;text-align:center;display:none}
+    #idle-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:400;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+    .idle-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;text-align:center;max-width:320px;width:90%}
+    #idle-ring-fill{width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--warn) 100%,var(--border) 100%);margin:0 auto 4px;display:flex;align-items:center;justify-content:center}
+    .idle-inner{width:62px;height:62px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center}
+    #idle-seconds{font-size:22px;font-weight:800;color:var(--warn)}
+    .idle-title{font-weight:700;font-size:15px;margin:12px 0 6px}
+    .idle-sub{color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:20px}
+    .idle-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .idle-logout{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
+    .idle-stay{background:var(--accent);border:none;border-radius:8px;padding:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px var(--accent-glow)}
+  </style>
+</head>
+<body>
+
+<div id="idle-overlay">
+  <div class="idle-card">
+    <div id="idle-ring-fill"><div class="idle-inner"><span id="idle-seconds">60</span></div></div>
+    <div class="idle-title">Still there?</div>
+    <div class="idle-sub">You've been inactive for 15 minutes.<br>You'll be logged out in <strong id="idle-warn-s" style="color:var(--warn)">60</strong> seconds.</div>
+    <div class="idle-actions">
+      <button class="idle-logout" onclick="CmAuth.logout('/dealer-login.html')">Logout now</button>
+      <button class="idle-stay" onclick="CmAuth.dismissCountdown('/dealer-login.html')">Stay logged in</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">✏️ Edit Profile</span>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="field">
+      <div class="field-label">EMAIL (cannot be changed)</div>
+      <div class="field-locked"><span id="modal-email"></span><span>🔒</span></div>
+    </div>
+    <div class="field"><div class="field-label">BUSINESS NAME</div><input id="f-name" type="text"></div>
+    <div class="field">
+      <div class="field-label">INDUSTRY CATEGORY</div>
+      <select id="f-industry">
+        <option>Automotive</option><option>Real Estate</option><option>Travel & Tourism</option>
+        <option>Education & Coaching</option><option>Healthcare & Wellness</option>
+        <option>Finance & Insurance</option><option>IT Services & Software</option>
+        <option>Furniture & Home Decor</option><option>Fitness & Gym</option>
+        <option>Food & Catering</option><option>Construction & Interior Design</option>
+        <option>Legal Services</option><option>Electronics & Gadgets</option>
+        <option>Clothing & Fashion</option><option>Beauty & Salon</option>
+        <option>Marketing & Advertising</option><option>Photography & Events</option>
+        <option>Logistics & Packers Movers</option><option>HR & Staffing</option>
+        <option>Retail & E-commerce</option><option>Other</option>
+      </select>
+    </div>
+    <div class="two-col">
+      <div class="field"><div class="field-label">CITY</div><input id="f-city" type="text"></div>
+      <div class="field"><div class="field-label">STATE</div><input id="f-state" type="text"></div>
+    </div>
+    <div class="field"><div class="field-label">KEYWORDS (comma separated)</div><input id="f-keywords" type="text"></div>
+    <div class="field"><div class="field-label">SERVICES</div><textarea id="f-services"></textarea></div>
+    <div class="field"><div class="field-label">TARGET CUSTOMERS</div><input id="f-target" type="text"></div>
+    <div class="field"><div class="field-label">SERVICE AREAS</div><input id="f-areas" type="text"></div>
+    <div class="field"><div class="field-label">CUSTOM SUBREDDITS (comma separated)</div><input id="f-subreddits" type="text"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" id="save-btn" onclick="saveProfile()">Save Changes</button>
+    </div>
+    <div class="success-msg" id="save-success">✓ Profile updated</div>
+  </div>
+</div>
+
+<nav>
+  <div class="brand">Connect Market <span>Dealer Portal</span></div>
+  <div class="nav-right">
+    <div class="theme-toggle" onclick="CmAuth.toggleTheme()">
+      <div class="theme-icon" id="btn-moon">🌙</div>
+      <div class="theme-icon" id="btn-sun">☀️</div>
+    </div>
+    <div class="user-menu">
+      <div class="user-btn" id="user-btn" onclick="toggleDropdown()">
+        <span>👤</span><span id="user-name">…</span><span>▾</span>
+      </div>
+      <div class="dropdown" id="user-dropdown">
+        <a onclick="openModal()">✏️ Edit Profile</a>
+        <a onclick="CmAuth.logout('/dealer-login.html')">🚪 Logout</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div id="sub-banner"></div>
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">TOTAL LEADS</div>
+      <div class="stat-value" id="stat-total">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">SUBSCRIPTION</div>
+      <div id="stat-sub-status">—</div>
+      <div class="stat-sub" id="stat-sub-exp"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">THIS MONTH</div>
+      <div class="stat-value" id="stat-month">—</div>
+    </div>
+  </div>
+  <div class="section-card">
+    <div class="section-header"><span>Your Leads</span><span style="color:var(--muted);font-size:11px;font-weight:400">Latest first</span></div>
+    <div id="leads-list"></div>
+    <button class="load-more" id="load-more-btn" style="display:none" onclick="loadMore()">Load more</button>
+  </div>
+</main>
+
+<script src="/js/auth.js"></script>
+<script>
+  CmAuth.initTheme();
+
+  let dealerId, currentPage = 1, totalPages = 1, dealerData;
+
+  async function init() {
+    const user = await CmAuth.requirePortalAuth('dealer', '/dealer-login.html');
+    if (!user) return;
+    dealerId = user.id;
+    document.getElementById('user-name').textContent = user.name;
+    CmAuth.initIdleTimer('/dealer-login.html');
+    await Promise.all([loadStats(), loadLeads(1)]);
+  }
+
+  async function loadStats() {
+    const res = await fetch(`/api/dealers/${dealerId}/stats`);
+    if (!res.ok) return;
+    const s = await res.json();
+    document.getElementById('stat-total').textContent = s.total_leads;
+    document.getElementById('stat-month').textContent = s.this_month;
+    renderSubStatus(s);
+    renderBanner(s);
+    const dr = await fetch(`/api/dealers/${dealerId}`);
+    if (dr.ok) { dealerData = await dr.json(); document.getElementById('modal-email').textContent = dealerData.emails; }
+  }
+
+  function renderSubStatus(s) {
+    const el = document.getElementById('stat-sub-status');
+    const exp = document.getElementById('stat-sub-exp');
+    const now = new Date();
+    const expiresAt = s.subscription_expires_at ? new Date(s.subscription_expires_at) : null;
+    if (s.subscription_status === 'active' && expiresAt && expiresAt > now) {
+      el.innerHTML = '<span class="stat-badge badge-active">Active</span>';
+      exp.textContent = 'Expires ' + expiresAt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    } else if (s.subscription_status === 'active' && (!expiresAt || expiresAt <= now)) {
+      el.innerHTML = `<span class="stat-badge badge-expired">Expired</span><br><a href="/pay?dealer_id=${dealerId}" class="stat-badge badge-free" style="text-decoration:none;display:inline-block;margin-top:4px">Activate ₹10</a>`;
+      exp.textContent = '';
+    } else {
+      el.innerHTML = `<span class="stat-badge badge-free">Free (${s.lead_count}/2 used)</span>`;
+      exp.textContent = '';
+    }
+  }
+
+  function renderBanner(s) {
+    const el = document.getElementById('sub-banner');
+    const now = new Date();
+    const expiresAt = s.subscription_expires_at ? new Date(s.subscription_expires_at) : null;
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    if (s.subscription_status === 'active' && expiresAt && expiresAt > now && (expiresAt - now) <= threeDays) {
+      const days = Math.ceil((expiresAt - now) / 86400000);
+      el.innerHTML = `<div class="banner warn"><div><div class="banner-text">⚠️ Subscription expires in ${days} day${days>1?'s':''}</div><div class="banner-sub">Renew now to keep receiving leads</div></div><a href="/pay?dealer_id=${dealerId}" class="banner-btn">Renew ₹10</a></div>`;
+    } else if (s.subscription_status === 'active' && expiresAt && expiresAt <= now) {
+      el.innerHTML = `<div class="banner danger"><div><div class="banner-text">🔴 Subscription expired — leads paused</div><div class="banner-sub">Subscribe for ₹10/month to resume</div></div><a href="/pay?dealer_id=${dealerId}" class="banner-btn">Subscribe ₹10</a></div>`;
+    } else if (s.subscription_status !== 'active' && parseInt(s.lead_count) > 2) {
+      el.innerHTML = `<div class="banner danger"><div><div class="banner-text">🔴 Free leads used up — leads paused</div><div class="banner-sub">Subscribe for ₹10/month to keep receiving leads</div></div><a href="/pay?dealer_id=${dealerId}" class="banner-btn">Subscribe ₹10</a></div>`;
+    }
+  }
+
+  async function loadLeads(page) {
+    const res = await fetch(`/api/dealers/${dealerId}/leads?page=${page}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    currentPage = data.page; totalPages = data.pages;
+    const list = document.getElementById('leads-list');
+    if (page === 1) list.innerHTML = '';
+    if (!data.items.length && page === 1) {
+      list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No leads yet. The crawler will email you when buyer-intent posts are found.</div>';
+    }
+    data.items.forEach(lead => {
+      const ago = timeAgo(lead.emailed_at);
+      const source = lead.subreddit === 'instagram' ? 'Instagram' : 'r/' + lead.subreddit;
+      list.insertAdjacentHTML('beforeend', `
+        <div class="lead-row">
+          <div class="lead-title">${esc(lead.post_title)}</div>
+          <div class="lead-meta">${source} · ${ago}${lead.lead_category ? ' · ' + esc(lead.lead_category) : ''}</div>
+          ${lead.suggested_reply ? `<div class="lead-reply">"${esc(lead.suggested_reply.slice(0,120))}${lead.suggested_reply.length>120?'…':''}"</div>` : ''}
+          <a class="lead-link" href="${esc(lead.post_url)}" target="_blank" rel="noopener">View Post →</a>
+        </div>`);
+    });
+    document.getElementById('load-more-btn').style.display = currentPage < totalPages ? 'block' : 'none';
+  }
+
+  function loadMore() { loadLeads(currentPage + 1); }
+
+  function openModal() {
+    if (dealerData) {
+      document.getElementById('f-name').value = dealerData.name || '';
+      document.getElementById('f-industry').value = dealerData.industry_category || 'Other';
+      document.getElementById('f-city').value = dealerData.city || '';
+      document.getElementById('f-state').value = dealerData.state || '';
+      document.getElementById('f-keywords').value = dealerData.keywords || '';
+      document.getElementById('f-services').value = dealerData.services || '';
+      document.getElementById('f-target').value = dealerData.target_customers || '';
+      document.getElementById('f-areas').value = dealerData.service_areas || '';
+      document.getElementById('f-subreddits').value = dealerData.custom_subreddits || '';
+    }
+    document.getElementById('save-success').style.display = 'none';
+    document.getElementById('profile-modal').classList.add('open');
+    document.getElementById('user-dropdown').classList.remove('open');
+  }
+
+  function closeModal() { document.getElementById('profile-modal').classList.remove('open'); }
+
+  async function saveProfile() {
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/dealers/${dealerId}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          name: document.getElementById('f-name').value,
+          emails: dealerData.emails,
+          industry_category: document.getElementById('f-industry').value,
+          city: document.getElementById('f-city').value,
+          state: document.getElementById('f-state').value,
+          keywords: document.getElementById('f-keywords').value,
+          services: document.getElementById('f-services').value,
+          target_customers: document.getElementById('f-target').value,
+          service_areas: document.getElementById('f-areas').value,
+          custom_subreddits: document.getElementById('f-subreddits').value,
+        }),
+      });
+      if (res.ok) {
+        dealerData = { ...dealerData, name: document.getElementById('f-name').value };
+        document.getElementById('user-name').textContent = dealerData.name;
+        document.getElementById('save-success').style.display = 'block';
+        setTimeout(closeModal, 1200);
+      }
+    } finally { btn.disabled = false; btn.textContent = 'Save Changes'; }
+  }
+
+  function toggleDropdown() { document.getElementById('user-dropdown').classList.toggle('open'); }
+  document.addEventListener('click', e => {
+    if (!document.getElementById('user-btn').contains(e.target))
+      document.getElementById('user-dropdown').classList.remove('open');
+  });
+
+  function timeAgo(iso) {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const h = Math.floor(diff / 3600000);
+    if (h < 1) return 'just now';
+    if (h < 24) return h + ' hour' + (h>1?'s':'') + ' ago';
+    const d = Math.floor(h / 24);
+    return d + ' day' + (d>1?'s':'') + ' ago';
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  init();
+</script>
+</body>
+</html>

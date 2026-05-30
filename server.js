@@ -25,13 +25,19 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { requireAuth } = require('./auth-middleware');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const registrationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
+const paymentLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
 
 const otpStore = new Map(); // email -> {otp, type, id, expiresAt}
 const otpRateLimit = new Map(); // email -> {count, windowStart}
+const otpVerifyAttempts = new Map(); // email -> {count, otp}
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of otpStore) if (v.expiresAt < now) otpStore.delete(k);
   for (const [k, v] of otpRateLimit) if (now - v.windowStart > 10 * 60 * 1000) otpRateLimit.delete(k);
+  for (const [k, v] of otpVerifyAttempts) if (!otpStore.has(k)) otpVerifyAttempts.delete(k);
 }, 5 * 60 * 1000).unref();
 
 function checkRateLimit(email) {
@@ -46,8 +52,15 @@ function checkRateLimit(email) {
   return true;
 }
 
+if (!process.env.SESSION_SECRET) {
+  console.error('[fatal] SESSION_SECRET not set — refusing to start');
+  process.exit(1);
+}
+
 function createApp() {
   const app = express();
+  app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled to avoid breaking inline scripts
+  app.use(helmet.frameguard({ action: 'deny' }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
@@ -67,26 +80,25 @@ function createApp() {
     try {
       let userId = null;
       if (type === 'admin') {
-        if (email !== process.env.ADMIN_EMAIL) return res.status(404).json({ error: 'Email not found' });
-        userId = 0;
+        if (email === process.env.ADMIN_EMAIL) userId = 0;
       } else if (type === 'dealer') {
         const dealers = await getDealers();
         const dealer = dealers.find(d => d.emails && d.emails.split(',').map(e => e.trim()).includes(email) && d.active === '1');
-        if (!dealer) return res.status(404).json({ error: 'Email not found' });
-        userId = parseInt(dealer.id);
+        if (dealer) userId = parseInt(dealer.id);
       } else {
         const candidates = await getCandidates();
         const candidate = candidates.find(c => c.emails && c.emails.split(',').map(e => e.trim()).includes(email) && c.active === '1');
-        if (!candidate) return res.status(404).json({ error: 'Email not found' });
-        userId = parseInt(candidate.id);
+        if (candidate) userId = parseInt(candidate.id);
       }
-      const otp = String(crypto.randomInt(100000, 1000000));
-      otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
-      // Send email in background — don't await so the response is immediate
-      sendOtpEmail(email, otp).catch(err =>
-        console.error('[auth] OTP email failed:', err.message)
-      );
-      res.json({ success: true });
+      if (userId !== null) {
+        const otp = String(crypto.randomInt(100000, 1000000));
+        otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+        // Send email in background — don't await so the response is immediate
+        sendOtpEmail(email, otp).catch(err =>
+          console.error('[auth] OTP email failed:', err.message)
+        );
+      }
+      res.json({ success: true }); // don't reveal if email exists
     } catch (err) {
       console.error('[auth] request-otp error:', err.message);
       res.status(500).json({ error: 'Failed to send OTP' });
@@ -96,11 +108,22 @@ function createApp() {
   app.post('/api/auth/verify-otp', (req, res) => {
     const { email, otp, type } = req.body;
     if (!email || !otp || !type) return res.status(400).json({ error: 'email, otp, type required' });
+    const attempts = otpVerifyAttempts.get(email) || { count: 0 };
+    if (attempts.count >= 10) {
+      otpStore.delete(email);
+      otpVerifyAttempts.delete(email);
+      return res.status(429).json({ error: 'Too many attempts. Request a new OTP.' });
+    }
+    otpVerifyAttempts.set(email, { count: attempts.count + 1 });
     const entry = otpStore.get(email);
-    if (!entry || entry.otp !== String(otp) || entry.type !== type || entry.expiresAt < Date.now()) {
+    const otpBuffer = Buffer.from(entry ? entry.otp : '______');
+    const inputBuffer = Buffer.from(String(otp).padEnd(6, '_'));
+    const otpMatch = entry && otpBuffer.length === inputBuffer.length && crypto.timingSafeEqual(otpBuffer, inputBuffer);
+    if (!entry || !otpMatch || entry.type !== type || entry.expiresAt < Date.now()) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
     otpStore.delete(email);
+    otpVerifyAttempts.delete(email);
     const token = jwt.sign({ type: entry.type, id: entry.id }, process.env.SESSION_SECRET, { algorithm: 'HS256', expiresIn: '7d' });
     res.cookie('cm_auth', token, { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     res.json({ success: true, type: entry.type, id: entry.id });
@@ -151,7 +174,7 @@ function createApp() {
 
   app.get('/api/dealers/:id/leads', requireAuth('dealer', 'admin'), async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
+      const page = Math.min(parseInt(req.query.page) || 1, 100);
       res.json(await getDealerLeads(parseInt(req.params.id), page));
     } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
@@ -179,7 +202,7 @@ function createApp() {
 
   app.get('/api/candidates/:id/job-matches', requireAuth('candidate', 'admin'), async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
+      const page = Math.min(parseInt(req.query.page) || 1, 100);
       res.json(await getCandidateJobMatches(parseInt(req.params.id), page));
     } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
   });
@@ -201,7 +224,7 @@ function createApp() {
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats' }); }
   });
 
-  app.post('/api/register', async (req, res) => {
+  app.post('/api/register', registrationLimiter, async (req, res) => {
     const { name, emails, industry_category, services, keywords, state, city, target_customers, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category || !services || !keywords || !state || !city) {
       return res.status(400).json({ error: 'Required: name, emails, industry_category, services, keywords, state, city' });
@@ -244,6 +267,15 @@ function createApp() {
     const { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category) return res.status(400).json({ error: 'name, emails, industry_category required' });
     try {
+      if (emails) {
+        const allDealers = await getDealers();
+        const emailList = emails.split(',').map(e => e.trim().toLowerCase());
+        const conflict = allDealers.find(d =>
+          String(d.id) !== String(req.params.id) &&
+          d.emails && d.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
+        );
+        if (conflict) return res.status(400).json({ error: 'Email already in use by another dealer' });
+      }
       await updateDealer(parseInt(req.params.id), { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true });
     } catch (err) {
@@ -297,9 +329,12 @@ function createApp() {
     }
   });
 
-  app.post('/api/payments', async (req, res) => {
+  app.post('/api/payments', paymentLimiter, async (req, res) => {
     const { dealer_id, utr_number } = req.body;
     if (!dealer_id || !utr_number) return res.status(400).json({ error: 'dealer_id and utr_number required' });
+    if (!utr_number || !/^[A-Za-z0-9]{8,25}$/.test(utr_number)) {
+      return res.status(400).json({ error: 'Invalid UTR number format' });
+    }
     try {
       await addPayment({ dealerId: parseInt(dealer_id), utrNumber: utr_number });
       res.json({ success: true });
@@ -346,7 +381,8 @@ function createApp() {
       const result = await cleanupOldData();
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('[admin] error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -386,7 +422,8 @@ function createApp() {
       await incrementCandidateLeadCount(candidate.id);
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('[admin] error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -430,7 +467,8 @@ function createApp() {
       await incrementDealerLeadCount(dealer.id);
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error('[admin] error:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
@@ -521,13 +559,13 @@ function createApp() {
       res.json({ success: true, errors: errors.length ? errors : undefined });
     } catch (err) {
       console.error(`[admin] assign-many error: ${err.message}`);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'Internal server error' });
     }
   });
 
   // ── Candidates ────────────────────────────────────────────────────────────────
 
-  app.post('/api/candidates/register', async (req, res) => {
+  app.post('/api/candidates/register', registrationLimiter, async (req, res) => {
     const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
     if (!name || !emails || !role || !skills || !city) {
       return res.status(400).json({ error: 'Required: name, emails, role, skills, city' });
@@ -558,6 +596,15 @@ function createApp() {
     const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
     if (!name || !emails || !role) return res.status(400).json({ error: 'name, emails, role required' });
     try {
+      if (emails) {
+        const allCandidates = await getCandidates();
+        const emailList = emails.split(',').map(e => e.trim().toLowerCase());
+        const conflict = allCandidates.find(c =>
+          String(c.id) !== String(req.params.id) &&
+          c.emails && c.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
+        );
+        if (conflict) return res.status(400).json({ error: 'Email already in use by another candidate' });
+      }
       await updateCandidate(parseInt(req.params.id), { name, emails, role, skills, experience_level, city, state, preferred_locations });
       res.json({ success: true });
     } catch (err) {
@@ -601,9 +648,12 @@ function createApp() {
 
   // ── Candidate Payments ────────────────────────────────────────────────────────
 
-  app.post('/api/candidate-payments', async (req, res) => {
+  app.post('/api/candidate-payments', paymentLimiter, async (req, res) => {
     const { candidate_id, utr_number } = req.body;
     if (!candidate_id || !utr_number) return res.status(400).json({ error: 'candidate_id and utr_number required' });
+    if (!utr_number || !/^[A-Za-z0-9]{8,25}$/.test(utr_number)) {
+      return res.status(400).json({ error: 'Invalid UTR number format' });
+    }
     try {
       await addCandidatePayment({ candidateId: parseInt(candidate_id), utrNumber: utr_number });
       res.json({ success: true });

@@ -155,10 +155,10 @@ test('POST /api/crawl/trigger returns 404 — route removed', async () => {
 });
 
 test('POST /api/payments submits UTR', async () => {
-  const res = await request(app).post('/api/payments').send({ dealer_id: 1, utr_number: 'UTR123' });
+  const res = await request(app).post('/api/payments').send({ dealer_id: 1, utr_number: 'UTR12345678' });
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
-  expect(sheetsModule.addPayment).toHaveBeenCalledWith(expect.objectContaining({ utrNumber: 'UTR123' }));
+  expect(sheetsModule.addPayment).toHaveBeenCalledWith(expect.objectContaining({ utrNumber: 'UTR12345678' }));
 });
 
 test('POST /api/payments/:id/verify activates subscription', async () => {
@@ -223,7 +223,7 @@ test('GET /api/candidates returns candidate list', async () => {
 test('POST /api/candidate-payments creates a payment', async () => {
   sheetsModule.getCandidate.mockResolvedValue({ id: '1', name: 'John Dev', emails: 'john@dev.com' });
   sheetsModule.addCandidatePayment.mockResolvedValue(1);
-  const res = await request(app).post('/api/candidate-payments').send({ candidate_id: 1, utr_number: 'UTR999' });
+  const res = await request(app).post('/api/candidate-payments').send({ candidate_id: 1, utr_number: 'UTR99912345' });
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
   expect(sheetsModule.addCandidatePayment).toHaveBeenCalled();

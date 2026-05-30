@@ -59,8 +59,8 @@
       document.getElementById('form').addEventListener('submit', e => { e.preventDefault(); });
     } else {
       fetch('/api/dealers/' + dealerId)
-        .then(r => r.json())
-        .then(d => { document.getElementById('dealer-name').textContent = d.name || 'Dealer'; })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) document.getElementById('dealer-name').textContent = d.name || 'Dealer'; })
         .catch(() => {});
     }
 

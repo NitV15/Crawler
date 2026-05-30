@@ -104,11 +104,12 @@ describe('POST /api/auth/request-otp', () => {
     expect(res.status).toBe(400);
   });
 
-  test('returns 404 when dealer email not found', async () => {
+  test('returns 200 (without sending OTP) when dealer email not found', async () => {
     const { getDealers } = require('../sheets');
     getDealers.mockResolvedValue([{ id: '1', emails: 'other@b.com', active: '1' }]);
     const res = await request(app).post('/api/auth/request-otp').send({ email: 'a@b.com', type: 'dealer' });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   test('sends OTP and returns 200 for known dealer email', async () => {

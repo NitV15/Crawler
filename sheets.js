@@ -504,7 +504,7 @@ async function getDealerLeads(dealerId, page = 1) {
     .sort((a, b) => parseInt(b.id) - parseInt(a.id));
   const total = filtered.length;
   const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) };
+  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
 }
 
 async function getCandidateJobMatches(candidateId, page = 1) {
@@ -515,7 +515,7 @@ async function getCandidateJobMatches(candidateId, page = 1) {
     .sort((a, b) => parseInt(b.id) - parseInt(a.id));
   const total = filtered.length;
   const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) };
+  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
 }
 
 module.exports = {

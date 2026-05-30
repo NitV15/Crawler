@@ -123,7 +123,7 @@ function createApp() {
     }
   });
 
-  app.get('/api/debug-env', (req, res) => {
+  app.get('/api/debug-env', requireAuth('admin'), (req, res) => {
     res.json({
       SPREADSHEET_ID: process.env.SPREADSHEET_ID || 'NOT SET',
       HAS_CREDENTIALS_JSON: !!process.env.GOOGLE_CREDENTIALS_JSON,
@@ -644,17 +644,17 @@ function createApp() {
 
   // ── Jobs Crawler ──────────────────────────────────────────────────────────────
 
-  app.post('/api/jobs/start', (req, res) => {
+  app.post('/api/jobs/start', requireAuth('admin'), (req, res) => {
     startJobsCrawler().catch(err => console.error('[server] Jobs crawler error:', err.message));
     res.json({ success: true });
   });
 
-  app.post('/api/jobs/stop', (req, res) => {
+  app.post('/api/jobs/stop', requireAuth('admin'), (req, res) => {
     stopJobsCrawler();
     res.json({ success: true });
   });
 
-  app.get('/api/jobs/status', (req, res) => {
+  app.get('/api/jobs/status', requireAuth('admin'), (req, res) => {
     res.json(getJobsCrawlerStatus());
   });
 

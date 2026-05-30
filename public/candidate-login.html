@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Candidate Login — Connect Market</title>
+  <style>
+    :root { --bg:#0f0f23;--card:#13132b;--border:#1e1e45;--text:#e0e0ff;--muted:#7c7caa;--accent:#4f6ef7;--accent-glow:rgba(79,110,247,0.4);--input-bg:#0f0f23;--input-border:#2a2d45;--info-bg:#1e1e45;--warn:#f59e0b; }
+    [data-theme="light"] { --bg:#f0f2fa;--card:#ffffff;--border:#e5e7eb;--text:#111111;--muted:#888888;--input-bg:#ffffff;--input-border:#d1d5db;--info-bg:#f0f2fa; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;transition:background .2s}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:100%;max-width:340px;box-shadow:0 8px 40px rgba(79,110,247,0.12)}
+    .brand{color:var(--text);font-weight:800;font-size:18px;text-align:center;margin-bottom:4px}
+    .subtitle{color:var(--muted);font-size:12px;text-align:center;margin-bottom:28px}
+    .label{color:var(--muted);font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px}
+    input[type=email],input[type=text]{width:100%;background:var(--input-bg);border:1px solid var(--input-border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:13px;outline:none;transition:border .2s}
+    input:focus{border-color:var(--accent)}
+    .btn{width:100%;background:var(--accent);border:none;border-radius:10px;padding:13px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px var(--accent-glow);transition:opacity .2s;margin-top:4px}
+    .btn:hover{opacity:.9}.btn:disabled{opacity:.5;cursor:not-allowed}
+    .divider{display:flex;align-items:center;gap:8px;margin:16px 0}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+    .divider span{color:var(--muted);font-size:10px}
+    .link{color:var(--accent);font-size:12px;font-weight:600;text-decoration:none;cursor:pointer}
+    .link:hover{text-decoration:underline}
+    .info-box{background:var(--info-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:20px}
+    .info-box .to-label{color:var(--muted);font-size:10px;margin-bottom:2px}
+    .info-box .to-email{color:var(--accent);font-size:13px;font-weight:600}
+    .otp-row{display:flex;gap:8px;justify-content:center;margin-bottom:20px}
+    .otp-box{width:42px;height:52px;background:var(--input-bg);border:2px solid var(--input-border);border-radius:8px;text-align:center;font-size:20px;font-weight:700;color:var(--text);outline:none;transition:border .2s}
+    .otp-box:focus,.otp-box:not(:placeholder-shown){border-color:var(--accent)}
+    .error{color:#ef4444;font-size:12px;margin-top:8px;display:none}
+    .timer{color:var(--muted);font-size:11px;text-align:center;margin-top:12px}
+    .timer span{color:var(--warn);font-weight:600}
+    .theme-btn{position:fixed;top:16px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 12px;cursor:pointer;display:flex;gap:8px;align-items:center}
+    .theme-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;transition:background .2s}
+    #btn-moon{background:var(--accent)}
+    #btn-sun{background:transparent}
+    [data-theme="light"] #btn-moon{background:transparent}
+    [data-theme="light"] #btn-sun{background:var(--accent)}
+  </style>
+</head>
+<body>
+<button class="theme-btn" onclick="CmAuth.toggleTheme()">
+  <div class="theme-icon" id="btn-moon">🌙</div>
+  <div class="theme-icon" id="btn-sun">☀️</div>
+</button>
+
+<div class="card" id="step-email">
+  <div class="brand">Connect Market</div>
+  <div class="subtitle">Sign in to your Candidate Portal</div>
+  <div class="label">EMAIL ADDRESS</div>
+  <input type="email" id="email-input" placeholder="candidate@example.com" autocomplete="email">
+  <div class="error" id="email-error">Email not found. Check your registered email.</div>
+  <button class="btn" id="send-btn" onclick="sendOtp()" style="margin-top:14px">Send OTP →</button>
+  <div class="divider"><span>or</span></div>
+  <div style="text-align:center">
+    <a href="/register-candidate.html" class="link">New candidate? Register here →</a>
+  </div>
+</div>
+
+<div class="card" id="step-otp" style="display:none">
+  <div class="brand">Connect Market</div>
+  <div class="subtitle">Enter your one-time code</div>
+  <div class="info-box">
+    <div class="to-label">Code sent to</div>
+    <div class="to-email" id="sent-to"></div>
+  </div>
+  <div class="otp-row">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+    <input class="otp-box" maxlength="1" placeholder=" " inputmode="numeric">
+  </div>
+  <div class="error" id="otp-error">Invalid or expired code. Try again.</div>
+  <button class="btn" id="verify-btn" onclick="verifyOtp()">Verify Code</button>
+  <div class="timer">Code expires in <span id="otp-timer">10:00</span></div>
+  <div style="text-align:center;margin-top:16px">
+    <a class="link" onclick="resendOtp()">Didn't get a code? Resend →</a>
+  </div>
+  <div style="text-align:center;margin-top:8px">
+    <a class="link" onclick="backToEmail()">← Use a different email</a>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+  CmAuth.initTheme();
+
+  fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(u => {
+    if (u && u.type === 'candidate') window.location.href = '/candidate-portal.html';
+  }).catch(() => {});
+
+  let currentEmail = '';
+  let timerInterval;
+  let timerSeconds = 600;
+
+  function startOtpTimer() {
+    clearInterval(timerInterval);
+    timerSeconds = 600;
+    timerInterval = setInterval(() => {
+      timerSeconds--;
+      const m = Math.floor(timerSeconds / 60).toString().padStart(2,'0');
+      const s = (timerSeconds % 60).toString().padStart(2,'0');
+      document.getElementById('otp-timer').textContent = m + ':' + s;
+      if (timerSeconds <= 0) clearInterval(timerInterval);
+    }, 1000);
+  }
+
+  async function sendOtp() {
+    const email = document.getElementById('email-input').value.trim();
+    const errEl = document.getElementById('email-error');
+    const btn = document.getElementById('send-btn');
+    errEl.style.display = 'none';
+    if (!email) return;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const res = await fetch('/api/auth/request-otp', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, type: 'candidate' }),
+      });
+      if (!res.ok) { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Send OTP →'; return; }
+      currentEmail = email;
+      document.getElementById('sent-to').textContent = email;
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-otp').style.display = 'block';
+      CmAuth.initOtpInputs();
+      startOtpTimer();
+    } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Send OTP →'; }
+  }
+
+  async function verifyOtp() {
+    const otp = CmAuth.getOtpValue();
+    const errEl = document.getElementById('otp-error');
+    const btn = document.getElementById('verify-btn');
+    errEl.style.display = 'none';
+    if (otp.length !== 6) return;
+    btn.disabled = true; btn.textContent = 'Verifying…';
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email: currentEmail, otp, type: 'candidate' }),
+      });
+      if (!res.ok) { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; return; }
+      window.location.href = '/candidate-portal.html';
+    } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; }
+  }
+
+  async function resendOtp() {
+    await fetch('/api/auth/request-otp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email: currentEmail, type: 'candidate' }),
+    });
+    startOtpTimer();
+  }
+
+  function backToEmail() {
+    clearInterval(timerInterval);
+    document.getElementById('step-otp').style.display = 'none';
+    document.getElementById('step-email').style.display = 'block';
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('send-btn').textContent = 'Send OTP →';
+  }
+
+  document.getElementById('email-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendOtp(); });
+</script>
+</body>
+</html>

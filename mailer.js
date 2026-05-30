@@ -3,9 +3,7 @@ const nodemailer = require('nodemailer');
 
 function createTransport() {
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    service: 'gmail',
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
 }
@@ -239,8 +237,9 @@ async function sendCandidateExpiredEmail(candidate, paymentLink) {
 
 async function sendOtpEmail(email, otp) {
   const transport = createTransport();
-  await transport.sendMail({
-    from: `"Connect Market" <${process.env.SMTP_USER}>`,
+  console.log(`[auth] Sending OTP email to ${email}`);
+  const info = await transport.sendMail({
+    from: process.env.SMTP_USER,
     to: email,
     subject: `Your Connect Market login code: ${otp}`,
     text: `Your one-time login code is:\n\n  ${otp}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.\n— Connect Market`,
@@ -253,6 +252,7 @@ async function sendOtpEmail(email, otp) {
       <p style="color:#888;font-size:13px">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>
     </div>`,
   });
+  console.log(`[auth] OTP email sent, messageId: ${info.messageId}`);
 }
 
 module.exports = {

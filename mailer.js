@@ -2,18 +2,26 @@ require('dotenv').config();
 const nodemailer = require('nodemailer');
 
 function createTransport() {
+  if (process.env.RESEND_API_KEY) {
+    return nodemailer.createTransport({
+      host: 'smtp.resend.com',
+      port: 465,
+      secure: true,
+      auth: { user: 'resend', pass: process.env.RESEND_API_KEY },
+    });
+  }
   return nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: 'resend',
-      pass: process.env.RESEND_API_KEY,
-    },
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
 }
 
-const FROM = 'Connect Market <onboarding@resend.dev>';
+const FROM = process.env.RESEND_API_KEY
+  ? 'Connect Market <onboarding@resend.dev>'
+  : process.env.SMTP_USER;
 
 function buildEmailText({ dealer, post, suggestedReply, includeSubscribeFooter = false, paymentLink = '' }) {
   const preview = post.title || (post.text || '').slice(0, 100);

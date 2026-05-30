@@ -3,13 +3,17 @@ const nodemailer = require('nodemailer');
 
 function createTransport() {
   return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    connectionTimeout: 10000,
-    greetingTimeout: 5000,
-    socketTimeout: 10000,
+    host: 'smtp.resend.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: 'resend',
+      pass: process.env.RESEND_API_KEY,
+    },
   });
 }
+
+const FROM = 'Connect Market <onboarding@resend.dev>';
 
 function buildEmailText({ dealer, post, suggestedReply, includeSubscribeFooter = false, paymentLink = '' }) {
   const preview = post.title || (post.text || '').slice(0, 100);
@@ -47,7 +51,7 @@ async function sendLeadEmail({ dealer, post, suggestedReply, includeSubscribeFoo
   const transport = createTransport();
   const emails = dealer.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: `New Lead Found — ${dealer.industry_category || dealer.industry || 'General'}`,
     text: buildEmailText({ dealer, post, suggestedReply, includeSubscribeFooter, paymentLink }),
@@ -58,7 +62,7 @@ async function sendSubscriptionConfirmationEmail(dealer) {
   const transport = createTransport();
   const emails = dealer.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Subscription Activated — Unlimited Leads for 30 Days',
     text: `Hi ${dealer.name},\n\nYour subscription has been activated! You now have unlimited leads for the next 30 days.\n\n---\nCrawler — Lead Discovery System`,
@@ -69,7 +73,7 @@ async function sendPaymentRejectedEmail(dealer) {
   const transport = createTransport();
   const emails = dealer.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Payment Not Verified — Please Resubmit',
     text: `Hi ${dealer.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nCrawler — Lead Discovery System`,
@@ -106,7 +110,7 @@ async function sendSubscriptionExpiryWarningEmail(dealer, paymentLink) {
   const transport = createTransport();
   const emails = dealer.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Your lead subscription expires in 3 days — renew now',
     text: buildExpiryWarningText(dealer, paymentLink),
@@ -117,7 +121,7 @@ async function sendSubscriptionExpiredEmail(dealer, paymentLink) {
   const transport = createTransport();
   const emails = dealer.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Your lead subscription has expired',
     text: buildExpiredText(dealer, paymentLink),
@@ -161,7 +165,7 @@ async function sendJobAlertEmail({ candidate, job, suggestedTip, includeSubscrib
   const transport = createTransport();
   const emails = candidate.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: `New Job Match: ${job.job_title} at ${job.company}`,
     text: buildJobAlertText({ candidate, job, suggestedTip, includeSubscribeFooter, paymentLink }),
@@ -172,7 +176,7 @@ async function sendCandidateSubscriptionConfirmationEmail(candidate) {
   const transport = createTransport();
   const emails = candidate.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Subscription Activated — Unlimited Job Alerts for 30 Days',
     text: `Hi ${candidate.name},\n\nYour subscription has been activated! You now have unlimited job alerts for the next 30 days.\n\n---\nJob Alerts — Powered by Basiq360`,
@@ -183,7 +187,7 @@ async function sendCandidatePaymentRejectedEmail(candidate) {
   const transport = createTransport();
   const emails = candidate.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Payment Not Verified — Please Resubmit',
     text: `Hi ${candidate.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nJob Alerts — Powered by Basiq360`,
@@ -220,7 +224,7 @@ async function sendCandidateExpiryWarningEmail(candidate, paymentLink) {
   const transport = createTransport();
   const emails = candidate.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Your job alerts subscription expires in 3 days — renew now',
     text: buildCandidateExpiryWarningText(candidate, paymentLink),
@@ -231,7 +235,7 @@ async function sendCandidateExpiredEmail(candidate, paymentLink) {
   const transport = createTransport();
   const emails = candidate.emails.split(',').map(e => e.trim());
   await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: emails.join(', '),
     subject: 'Your job alerts subscription has expired',
     text: buildCandidateExpiredText(candidate, paymentLink),
@@ -242,7 +246,7 @@ async function sendOtpEmail(email, otp) {
   const transport = createTransport();
   console.log(`[auth] Sending OTP email to ${email}`);
   const info = await transport.sendMail({
-    from: process.env.SMTP_USER,
+    from: FROM,
     to: email,
     subject: `Your Connect Market login code: ${otp}`,
     text: `Your one-time login code is:\n\n  ${otp}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.\n— Connect Market`,

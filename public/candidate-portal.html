@@ -205,7 +205,7 @@
       el.innerHTML = `<span class="stat-badge badge-expired">Expired</span><br><a href="/candidate-pay?candidate_id=${candidateId}" class="stat-badge badge-free" style="text-decoration:none;display:inline-block;margin-top:4px">Activate ₹10</a>`;
       exp.textContent = '';
     } else {
-      el.innerHTML = `<span class="stat-badge badge-free">Free (${s.lead_count}/2 used)</span>`;
+      el.innerHTML = `<span class="stat-badge badge-free">Free (${parseInt(s.lead_count) || 0}/2 used)</span>`;
       exp.textContent = '';
     }
   }

@@ -73,6 +73,8 @@
     function tick() {
       remaining--;
       if (seconds) seconds.textContent = remaining;
+      const warnEl = document.getElementById('idle-warn-s');
+      if (warnEl) warnEl.textContent = remaining;
       if (ring) {
         const pct = (remaining / WARN_S) * 100;
         ring.style.background = `conic-gradient(var(--warn) ${pct}%, var(--border) ${pct}%)`;

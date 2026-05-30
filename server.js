@@ -104,7 +104,7 @@ function createApp() {
   });
 
   app.post('/api/auth/logout', (req, res) => {
-    res.clearCookie('cm_auth');
+    res.clearCookie('cm_auth', { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     res.json({ success: true });
   });
 

@@ -17,15 +17,109 @@ const {
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('./jobs-crawler');
 const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail,
-        sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail } = require('./mailer');
+        sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail,
+        sendOtpEmail } = require('./mailer');
 const { identifyLead } = require('./matcher');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const { requireAuth } = require('./auth-middleware');
+
+const otpStore = new Map(); // email -> {otp, type, id, expiresAt}
+const otpRateLimit = new Map(); // email -> {count, windowStart}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of otpStore) if (v.expiresAt < now) otpStore.delete(k);
+  for (const [k, v] of otpRateLimit) if (now - v.windowStart > 10 * 60 * 1000) otpRateLimit.delete(k);
+}, 5 * 60 * 1000).unref();
+
+function checkRateLimit(email) {
+  const now = Date.now();
+  const entry = otpRateLimit.get(email);
+  if (!entry || now - entry.windowStart > 10 * 60 * 1000) {
+    otpRateLimit.set(email, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count++;
+  return true;
+}
 
 function createApp() {
   const app = express();
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
   app.use(express.static(path.join(__dirname, 'public')));
   app.get('/admin', (req, res) => res.redirect('/admin.html'));
+
+  // ── Auth ──────────────────────────────────────────────────────────────────────
+
+  app.post('/api/auth/request-otp', async (req, res) => {
+    const { email, type } = req.body;
+    if (!email || !['dealer', 'candidate', 'admin'].includes(type)) {
+      return res.status(400).json({ error: 'email and type required' });
+    }
+    if (!checkRateLimit(email)) {
+      return res.status(429).json({ error: 'Too many OTP requests. Try again in 10 minutes.' });
+    }
+    try {
+      let userId = null;
+      if (type === 'admin') {
+        if (email !== process.env.ADMIN_EMAIL) return res.status(404).json({ error: 'Email not found' });
+        userId = 0;
+      } else if (type === 'dealer') {
+        const dealers = await getDealers();
+        const dealer = dealers.find(d => d.emails && d.emails.split(',').map(e => e.trim()).includes(email) && d.active === '1');
+        if (!dealer) return res.status(404).json({ error: 'Email not found' });
+        userId = parseInt(dealer.id);
+      } else {
+        const candidates = await getCandidates();
+        const candidate = candidates.find(c => c.emails && c.emails.split(',').map(e => e.trim()).includes(email) && c.active === '1');
+        if (!candidate) return res.status(404).json({ error: 'Email not found' });
+        userId = parseInt(candidate.id);
+      }
+      const otp = String(require('crypto').randomInt(100000, 999999));
+      otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+      await sendOtpEmail(email, otp);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[auth] request-otp error:', err.message);
+      res.status(500).json({ error: 'Failed to send OTP' });
+    }
+  });
+
+  app.post('/api/auth/verify-otp', (req, res) => {
+    const { email, otp, type } = req.body;
+    if (!email || !otp || !type) return res.status(400).json({ error: 'email, otp, type required' });
+    const entry = otpStore.get(email);
+    if (!entry || entry.otp !== String(otp) || entry.type !== type || entry.expiresAt < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+    otpStore.delete(email);
+    const token = jwt.sign({ type: entry.type, id: entry.id }, process.env.SESSION_SECRET, { algorithm: 'HS256' });
+    res.cookie('cm_auth', token, { httpOnly: true, sameSite: 'strict' });
+    res.json({ success: true, type: entry.type, id: entry.id });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    res.clearCookie('cm_auth');
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/me', requireAuth('dealer', 'candidate', 'admin'), async (req, res) => {
+    try {
+      const { type, id } = req.user;
+      if (type === 'admin') return res.json({ type, id, name: 'Admin' });
+      if (type === 'dealer') {
+        const dealer = await getDealer(id);
+        return res.json({ type, id, name: dealer?.name || '' });
+      }
+      const candidate = await getCandidate(id);
+      return res.json({ type, id, name: candidate?.name || '' });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch user' });
+    }
+  });
 
   app.get('/api/debug-env', (req, res) => {
     res.json({

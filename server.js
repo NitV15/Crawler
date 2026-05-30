@@ -22,6 +22,7 @@ const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEma
 const { identifyLead } = require('./matcher');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { requireAuth } = require('./auth-middleware');
 
 const otpStore = new Map(); // email -> {otp, type, id, expiresAt}
@@ -78,7 +79,7 @@ function createApp() {
         if (!candidate) return res.status(404).json({ error: 'Email not found' });
         userId = parseInt(candidate.id);
       }
-      const otp = String(require('crypto').randomInt(100000, 999999));
+      const otp = String(crypto.randomInt(100000, 1000000));
       otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
       await sendOtpEmail(email, otp);
       res.json({ success: true });
@@ -96,8 +97,8 @@ function createApp() {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
     otpStore.delete(email);
-    const token = jwt.sign({ type: entry.type, id: entry.id }, process.env.SESSION_SECRET, { algorithm: 'HS256' });
-    res.cookie('cm_auth', token, { httpOnly: true, sameSite: 'strict' });
+    const token = jwt.sign({ type: entry.type, id: entry.id }, process.env.SESSION_SECRET, { algorithm: 'HS256', expiresIn: '7d' });
+    res.cookie('cm_auth', token, { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
     res.json({ success: true, type: entry.type, id: entry.id });
   });
 

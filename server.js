@@ -82,7 +82,10 @@ function createApp() {
       }
       const otp = String(crypto.randomInt(100000, 1000000));
       otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
-      await sendOtpEmail(email, otp);
+      // Send email in background — don't await so the response is immediate
+      sendOtpEmail(email, otp).catch(err =>
+        console.error('[auth] OTP email failed:', err.message)
+      );
       res.json({ success: true });
     } catch (err) {
       console.error('[auth] request-otp error:', err.message);

@@ -24,6 +24,9 @@
   <h2>Get Job Alerts</h2>
   <p class="subtitle">Register once and receive matching job alerts directly in your inbox.</p>
   <form id="form">
+    <p style="text-align:center;margin-bottom:16px;font-size:13px;color:#888">
+      Already registered? <a href="/candidate-login.html" style="color:#4f6ef7;font-weight:600">Login here →</a>
+    </p>
     <label>Full Name *<input name="name" required placeholder="e.g. Raj Kumar"></label>
     <label>Email Address(es) * <small>(comma-separated for multiple)</small>
       <input name="emails" type="text" required placeholder="e.g. raj@gmail.com">
@@ -73,11 +76,13 @@
         });
         const json = await res.json();
         if (json.success) {
-          msg.className = 'success';
-          msg.innerHTML = `You're registered! You'll get <strong>2 free job alerts</strong> to start.<br><br>
-            Want unlimited alerts? <a href="/candidate-pay?candidate_id=${json.candidate_id}" style="color:#1a73e8;font-weight:bold;">Subscribe for ₹10/month →</a>`;
-          msg.style.display = 'block';
-          e.target.reset();
+          document.querySelector('form').innerHTML = `
+  <div style="text-align:center;padding:32px 0">
+    <div style="font-size:48px;margin-bottom:16px">✅</div>
+    <h2 style="margin-bottom:8px">Registration successful!</h2>
+    <p style="color:#888;margin-bottom:24px;font-size:14px">You can now log in to your Candidate Portal.</p>
+    <a href="/candidate-login.html" style="display:inline-block;background:#4f6ef7;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Login to your Candidate Portal →</a>
+  </div>`;
         } else {
           msg.className = 'error';
           msg.textContent = json.error || 'Registration failed. Please try again.';

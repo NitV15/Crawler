@@ -8,7 +8,7 @@ This system has two independent pipelines running on the same Express server:
 
 2. **Jobs Pipeline** — Fetches job listings from Adzuna (the file is named `indeed-fetcher.js` but it calls the Adzuna API) for each registered job candidate based on their role and preferred locations, scores relevance via Gemini in batch, and emails matched listings with an application tip.
 
-Both pipelines run as continuous loops started/stopped via admin API. All data is stored in Google Sheets (no local database).
+Both pipelines run as continuous loops started/stopped via admin API. All data is stored in Google Sheets (no local database). All routes are protected by JWT-based authentication.
 
 **Example (Leads):** A furniture dealer in Faridabad gets an email when someone posts "Looking for a sofa in Sector 15 Faridabad" on r/Faridabad.
 
@@ -31,27 +31,32 @@ On first run with valid Google credentials but no `SPREADSHEET_ID`, the server a
 | Page | URL |
 |------|-----|
 | Landing page | http://localhost:3000/ |
-| Admin panel | http://localhost:3000/admin.html |
+| Admin login | http://localhost:3000/admin-login.html |
+| Admin panel | http://localhost:3000/admin.html (requires admin auth) |
+| Dealer login | http://localhost:3000/dealer-login.html |
+| Dealer portal | http://localhost:3000/dealer-portal.html (requires dealer auth) |
+| Candidate login | http://localhost:3000/candidate-login.html |
+| Candidate portal | http://localhost:3000/candidate-portal.html (requires candidate auth) |
 | Register dealer | http://localhost:3000/register.html |
 | Register candidate | http://localhost:3000/register-candidate.html |
 | Dealer payment | http://localhost:3000/pay?dealer_id=\<id\> |
 | Candidate payment | http://localhost:3000/candidate-pay?candidate_id=\<id\> |
 
-### Start/stop the crawlers (via API)
+### Start/stop the crawlers (via API — requires admin auth cookie)
 ```bash
-curl -X POST http://localhost:3000/api/crawl/start   # leads crawler
-curl -X POST http://localhost:3000/api/jobs/start    # jobs crawler
-curl http://localhost:3000/api/crawl/status
-curl http://localhost:3000/api/jobs/status
+curl -X POST http://localhost:3000/api/crawl/start
+curl -X POST http://localhost:3000/api/jobs/start
 ```
-
-Or use the Admin panel buttons.
 
 ---
 
 ## Environment Variables (.env)
 
 ```
+# Auth (REQUIRED)
+SESSION_SECRET=          # 32-byte hex string — generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ADMIN_EMAIL=             # email address that receives admin OTP codes
+
 # Reddit
 REDDIT_USER_AGENT=web:crawler-bot:1.0 (by /u/crawler_bot)
 REDDIT_CLIENT_ID=        # optional: Reddit OAuth app client ID (read-only)
@@ -59,16 +64,18 @@ REDDIT_CLIENT_SECRET=    # optional: Reddit OAuth app secret
 
 # AI
 GEMINI_API_KEY=          # Google AI Studio key (used by both pipelines)
-ANTHROPIC_API_KEY=       # Not currently used in code — only appears in /api/debug-env diagnostic output
+ANTHROPIC_API_KEY=       # Not currently used in code — only appears in /api/debug-env
 
 # Jobs (Adzuna API — despite file being named indeed-fetcher.js)
 ADZUNA_APP_ID=           # from api.adzuna.com developer console
 ADZUNA_APP_KEY=          # from api.adzuna.com developer console
 
 # Email
-SMTP_USER=               # Gmail address
-SMTP_PASS=               # Gmail App Password (not regular password)
+SMTP_USER=               # Gmail address (works locally)
+SMTP_PASS=               # Gmail App Password — NOT your regular Gmail password
                          # Google Account → Security → 2-Step → App passwords
+RESEND_API_KEY=          # Resend API key — used on Render (Gmail SMTP is blocked there)
+                         # Get from resend.com. When set, mailer uses smtp.resend.com:465
 
 # Google Sheets (storage backend)
 GOOGLE_CREDENTIALS_JSON= # service account JSON as a single-line string (preferred for Render/cloud)
@@ -82,9 +89,96 @@ INSTAGRAM_PASSWORD=      # dedicated account password
 # Server
 PORT=3000
 BASE_URL=http://localhost:3000
+NODE_ENV=production      # set this on Render to enable Secure cookie flag
 ```
 
-Reddit OAuth is optional — without it the crawler uses public `/r/X/new.json` endpoints. With it, higher rate limits apply.
+**Render env vars to set:** `SESSION_SECRET`, `ADMIN_EMAIL`, `RESEND_API_KEY`, `NODE_ENV=production`
+
+**Email on Render:** Gmail SMTP is blocked on Render's free tier (connection timeout). `mailer.js` automatically uses Resend SMTP (`smtp.resend.com:465`) when `RESEND_API_KEY` is set. Resend's `onboarding@resend.dev` sender only delivers to the Resend account owner's email — to send to all dealers/candidates, verify a custom domain in Resend.
+
+---
+
+## Authentication System
+
+All API routes (except registration and payment submission) require authentication. Three user types:
+
+| Type | Login page | Portal | Looks up email in |
+|------|-----------|--------|-------------------|
+| `admin` | `/admin-login.html` | `/admin.html` | `ADMIN_EMAIL` env var |
+| `dealer` | `/dealer-login.html` | `/dealer-portal.html` | `dealers` Sheet tab |
+| `candidate` | `/candidate-login.html` | `/candidate-portal.html` | `candidates` Sheet tab |
+
+### OTP Flow
+
+1. User enters their registered email on the login page
+2. `POST /api/auth/request-otp` → validates email (always returns 200 to prevent enumeration), generates 6-digit OTP, stores in in-memory Map (10-min TTL), sends via email in background
+3. User enters OTP code
+4. `POST /api/auth/verify-otp` → validates OTP (timing-safe comparison, max 10 attempts), signs JWT `{type, id}` with `SESSION_SECRET`, sets `HttpOnly SameSite=Strict` cookie
+5. Redirected to portal
+
+### JWT Sessions
+
+- Stored in `HttpOnly SameSite=Strict` cookie named `cm_auth`
+- Signed with `SESSION_SECRET` (HS256), expires in 7 days
+- Stateless — no server-side session store — scales to any number of users
+- `Secure` flag enabled when `NODE_ENV=production`
+
+### Auth Middleware (`auth-middleware.js`)
+
+```js
+requireAuth('dealer', 'admin')  // accepts dealer OR admin
+// For non-admin types: also checks req.params.id === payload.id (IDOR prevention)
+// Returns 401 if no/invalid token, 403 if wrong type or wrong id
+```
+
+### Inactivity Auto-Logout
+
+Client-side (`public/js/auth.js`): 15 min of no activity → 60-second countdown overlay → auto-logout if no response.
+
+### Security Features
+
+- OTP rate limit: 5 requests per email per 10 min (request endpoint)
+- OTP verify rate limit: 10 failed attempts locks out and invalidates the OTP
+- Registration rate limit: 5 requests per IP per 15 min
+- Payment rate limit: 10 requests per IP per 15 min
+- `helmet` security headers on all routes (X-Frame-Options: DENY, etc.)
+- UTR number format validated: `/^[A-Za-z0-9]{8,25}$/`
+- Email uniqueness check on profile updates (prevents account takeover)
+- Timing-safe OTP comparison (`crypto.timingSafeEqual`)
+- Server refuses to start without `SESSION_SECRET`
+
+---
+
+## User Portals
+
+### Dealer Portal (`/dealer-portal.html`)
+
+Self-service dashboard for dealers. Requires dealer JWT cookie.
+
+- **Stats row:** Total leads, Subscription status + expiry, Leads this month
+- **Subscription banner:** Orange if expiring ≤3 days, Red if expired or free leads exhausted
+- **Leads table:** Paginated (20/page), shows post title, source, category, AI suggested reply snippet, "View Post →" link
+- **Edit Profile:** Centered modal via nav dropdown — all fields except email. Saves via `PUT /api/dealers/:id`
+- **Theme toggle:** Dark (default) / Light — persisted in `localStorage`
+
+### Candidate Portal (`/candidate-portal.html`)
+
+Same structure as dealer portal but shows job alerts.
+
+- **Stats row:** Total job alerts, Subscription status, Role + city
+- **Job alerts table:** Paginated (20/page), shows job title, company, location, snippet, AI application tip, "Apply →" link
+- **Edit Profile:** Name, role, skills, experience level, city, state, preferred locations
+
+### Shared Client Module (`public/js/auth.js`)
+
+Loaded by all portal and login pages. Exposes `window.CmAuth`:
+- `initTheme()` / `toggleTheme()` — dark/light via `data-theme` + `localStorage`
+- `requirePortalAuth(type, loginUrl)` — calls `/api/auth/me`, redirects if wrong type
+- `logout(loginUrl)` — calls `POST /api/auth/logout`, redirects
+- `initIdleTimer(loginUrl)` — 15 min idle → 60s countdown → auto-logout
+- `dismissCountdown(loginUrl)` — "Stay logged in" handler
+- `initOtpInputs()` — wires up 6 individual OTP digit boxes with auto-advance, backspace, paste support
+- `getOtpValue()` — returns current 6-digit code
 
 ---
 
@@ -124,17 +218,6 @@ For each lead → for each matched dealer:
   No dealer matched  → saveLead(status='unmatched')
 ```
 
-**Sources:**
-
-| Source | File | Method | Identifier in `subreddit` column |
-|--------|------|--------|----------------------------------|
-| Reddit | `crawler.js` | Public JSON or OAuth (`/r/X/new.json`) | subreddit name e.g. `delhi` |
-| Instagram | `instagram-fetcher.js` + `instagram_scraper.py` | Python `instagrapi` via child_process | `instagram` |
-
-> IndiaMART (Puppeteer scraping) was previously integrated but has been removed.
-
-**Subscription warning emails:** If a dealer's subscription expires within 3 days, a warning email is sent once per process run (tracked in an in-memory Set — resets on server restart).
-
 ---
 
 ## Jobs Pipeline
@@ -161,15 +244,9 @@ processJobBatch(buffer) — Gemini 2.5 Flash scores all pairs at once
 For each relevant pair:
   getCandidate(id) — re-fetch for fresh subscription state
   checkCandidateSubscription(candidate) → 'send' | 'send_with_footer' | 'skip' | 'expired'
-  'expired'          → resetCandidateSubscription() + send expiry email
-  'skip'             → discard
   'send'             → saveJobMatch() + sendJobAlertEmail() + incrementCandidateLeadCount()
   'send_with_footer' → same + ₹10/month subscribe CTA in email
 ```
-
-**Deduplication:** `seenJobs` is an in-memory Set loaded from the `job_matches` sheet on startup. A job ID seen in a previous session is never re-emailed.
-
-**Subscription warning emails:** Same pattern as leads — warns 3 days before expiry, once per process run.
 
 ---
 
@@ -179,119 +256,11 @@ All data lives in a single Google Spreadsheet with 8 tabs. There is no local SQL
 
 `sheets.js` handles all reads/writes. It uses an in-memory cache for `seenPosts`, `seenJobs`, and `seenFetchedJobs` to avoid re-processing across cycles without re-querying the sheet.
 
-**Important:** `appendRow()` uses `rows.length + 1` as the next ID. This is non-atomic — if two writes happen concurrently, IDs can collide. The server avoids this by awaiting sequential writes where needed.
+**Important:** `appendRow()` uses `rows.length + 1` as the next ID. This is non-atomic — if two writes happen concurrently, IDs can collide.
 
-### Tab: `dealers`
+### Tabs: `dealers`, `leads`, `payments`, `fetched_posts`, `candidates`, `job_matches`, `candidate_payments`, `fetched_jobs`
 
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented integer |
-| name | Business name |
-| emails | Comma-separated email addresses |
-| industry_category | One of 21 categories (see Industry Categories section) |
-| services | What they sell (free text) |
-| target_customers | Who they sell to |
-| keywords | Comma-separated keywords for matching |
-| state | e.g. `Haryana` |
-| city | e.g. `Faridabad` |
-| service_areas | Granular: sectors, villages (free text) |
-| custom_subreddits | Extra subreddits beyond city default |
-| lead_count | Free-tier counter — resets on subscription |
-| subscription_status | `free` \| `active` |
-| subscription_expires_at | ISO date string or empty |
-| active | `1` \| `0` |
-| created_at | ISO date string |
-
-### Tab: `leads`
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| dealer_id | Empty if unmatched |
-| reddit_post_id | Unique post ID (prefix: `reddit_`, `insta_`) |
-| post_title | Post title |
-| post_text | Post body (truncated to 500 chars) |
-| post_url | Full URL |
-| subreddit | Source identifier (`delhi`, `instagram`, etc.) |
-| match_reason | e.g. `Category: Furniture & Home Decor` |
-| suggested_reply | AI-generated reply text |
-| what_to_sell | What the dealer should pitch |
-| lead_category | Industry category matched |
-| post_location | Location extracted from post |
-| status | `matched` \| `unmatched` \| `assigned` |
-| emailed_at | ISO date string |
-
-### Tab: `payments`
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| dealer_id | References dealers.id |
-| utr_number | UPI Transaction Reference |
-| amount | `10` (₹10/month) |
-| status | `pending` \| `verified` \| `rejected` |
-| created_at | ISO date string |
-| verified_at | ISO date string or empty |
-
-### Tab: `fetched_posts`
-
-Stores every raw post fetched in each cycle for admin browsing and manual send.
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| post_id | Unique post ID (matches `reddit_post_id` in leads) |
-| post_title / post_text / post_url | Post content (text truncated to 500 chars) |
-| subreddit | Source identifier |
-| fetched_at | ISO date string |
-
-### Tab: `candidates`
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| name | Candidate name |
-| emails | Comma-separated email addresses |
-| role | Job title they're looking for e.g. `React Developer` |
-| skills | Comma-separated skills |
-| experience_level | e.g. `Mid-level`, `Senior` |
-| city | Primary city |
-| state | State |
-| preferred_locations | Comma-separated additional cities or `Remote` |
-| lead_count | Free-tier counter |
-| subscription_status | `free` \| `active` |
-| subscription_expires_at | ISO date string or empty |
-| active | `1` \| `0` |
-| created_at | ISO date string |
-
-### Tab: `job_matches`
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| candidate_id | References candidates.id |
-| indeed_job_id | Adzuna job ID with `adzuna_` prefix |
-| job_title / company / location | Job details |
-| job_url | Adzuna redirect URL |
-| snippet | Job description excerpt |
-| suggested_tip | Gemini-generated application tip |
-| status | `matched` |
-| emailed_at | ISO date string |
-
-### Tab: `candidate_payments`
-
-Same structure as `payments` but references `candidate_id` instead of `dealer_id`. Amount is also ₹10.
-
-### Tab: `fetched_jobs`
-
-Stores every raw job fetched per cycle for admin browsing and manual send.
-
-| Column | Description |
-|--------|-------------|
-| id | Auto-incremented |
-| job_id | Adzuna job ID with `adzuna_` prefix |
-| job_title / company / location / job_url / snippet | Job details |
-| fetched_at | ISO date string |
+See original schema documentation — unchanged. Key: `dealers.emails` is comma-separated and used for OTP email lookup.
 
 ---
 
@@ -299,135 +268,136 @@ Stores every raw job fetched per cycle for admin browsing and manual send.
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Express app, all API routes. Entry point: `node server.js` calls `initSheets()` then starts server. `createApp()` exported for tests. |
-| `crawler.js` | Leads pipeline orchestrator — `startCrawler()` continuous loop, `runCycle()`, `processBatch()`, Reddit OAuth fetch, subscription check for dealers |
-| `jobs-crawler.js` | Jobs pipeline orchestrator — `startJobsCrawler()` continuous loop, `runJobsCycle()`, subscription check for candidates |
-| `matcher.js` | Leads AI — `processPostBatch(posts, dealers)` sends filtered posts to Gemini 2.5 Flash, returns per-post lead classification + dealer matching. Also exports `identifyLead()` for single-post use in the manual send flow. |
-| `job-matcher.js` | Jobs AI — `processJobBatch(pairs)` sends candidate+job pairs to Gemini 2.5 Flash, returns relevance scores + application tips. One retry on failure. |
-| `indeed-fetcher.js` | Adzuna API client — `fetchIndeedJobs(role, skills, city)` returns 25 job results. Named "indeed" for legacy reasons; actually calls `api.adzuna.com`. |
-| `instagram-fetcher.js` | Instagram source — `fetchInstagramLeads(dealers)` spawns `instagram_scraper.py` via child_process |
-| `instagram_scraper.py` | Python script using `instagrapi` — hashtag search + caption keyword search. Caches session to `instagram_session.json`. |
-| `sheets.js` | Google Sheets data layer — all CRUD for all 8 tabs. Manages in-memory `seenPosts`, `seenJobs`, `seenFetchedJobs` sets. Auto-creates spreadsheet if `SPREADSHEET_ID` is missing. |
-| `mailer.js` | Email via nodemailer/Gmail — leads email, job alert email, subscription confirmation, payment rejected, expiry warning for both dealers and candidates |
-| `prefilter.js` | `shouldCheckPost(post, dealers)` — fast keyword + intent phrase filter, no AI cost |
-| `subreddits.js` | `buildSubredditList(dealers)` — maps dealer city/state to subreddits using `CITY_SUBREDDIT_MAP` |
-| `logger.js` | Intercepts `console.log/warn/error` globally, stores last 500 log entries in memory, supports SSE subscriber pattern for live log streaming. Must be `require()`d first in server.js. |
-| `public/admin.html` | Admin panel |
-| `public/register.html` | Dealer self-registration form |
-| `public/register-candidate.html` | Candidate self-registration form |
-| `public/pay.html` | Dealer UPI payment page |
-| `public/candidate-pay.html` | Candidate UPI payment page |
-| `public/images/upi-qr.png` | **Must add manually** — UPI QR code image for payment pages |
-| `instagram_session.json` | Auto-created after first Instagram login (gitignored) |
-| `gen-lang-client-*.json` | Google service account credentials file (gitignored) |
-| `tests/` | Jest test suite — 11 test files |
+| `server.js` | Express app, all API routes. Entry point. `createApp()` exported for tests. Uses `helmet`, `express-rate-limit`, `cookie-parser`. |
+| `auth-middleware.js` | `requireAuth(...types)` — verifies JWT cookie, checks type, checks id match for non-admin |
+| `crawler.js` | Leads pipeline orchestrator |
+| `jobs-crawler.js` | Jobs pipeline orchestrator |
+| `matcher.js` | Leads AI — `processPostBatch()` + `identifyLead()` |
+| `job-matcher.js` | Jobs AI — `processJobBatch()` |
+| `indeed-fetcher.js` | Adzuna API client (named "indeed" for legacy reasons) |
+| `instagram-fetcher.js` | Instagram source via Python child_process |
+| `instagram_scraper.py` | Python `instagrapi` scraper |
+| `sheets.js` | Google Sheets data layer — all 8 tabs. Exports `readSheet`. |
+| `mailer.js` | All email sending. Auto-selects Resend SMTP (if `RESEND_API_KEY` set) or Gmail. |
+| `prefilter.js` | `shouldCheckPost()` — fast keyword filter, no AI cost |
+| `subreddits.js` | `buildSubredditList()` — city→subreddit map |
+| `logger.js` | Global console interceptor, last 500 logs, SSE streaming. Must be required first. |
+| `public/js/auth.js` | Shared client auth module — theme, idle timer, OTP inputs, auth check |
+| `public/admin.html` | Admin panel (requires admin JWT cookie) |
+| `public/admin-login.html` | Admin OTP login |
+| `public/dealer-login.html` | Dealer OTP login |
+| `public/candidate-login.html` | Candidate OTP login |
+| `public/dealer-portal.html` | Dealer self-service portal |
+| `public/candidate-portal.html` | Candidate self-service portal |
+| `public/register.html` | Dealer registration (public) |
+| `public/register-candidate.html` | Candidate registration (public) |
+| `public/pay.html` | Dealer UPI payment page (public) |
+| `public/candidate-pay.html` | Candidate UPI payment page (public) |
+| `public/images/upi-qr.png` | **Must add manually** — UPI QR code |
+| `tests/` | Jest test suite — 12 test files, 151 tests |
 
 ---
 
 ## API Routes
 
-### Dealers
+### Auth (public)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | /api/register | Register new dealer (required: name, emails, industry_category, services, keywords, state, city) |
-| GET | /api/dealers | List all dealers |
-| GET | /api/dealers/:id | Get single dealer |
-| PUT | /api/dealers/:id | Update dealer fields |
-| POST | /api/dealers/:id/toggle | Enable/disable dealer (`{active: true/false}`) |
-| POST | /api/dealers/:id/activate-subscription | Manually activate 30-day subscription |
-| POST | /api/dealers/:id/reset-subscription | Reset to free tier |
+| POST | /api/auth/request-otp | `{email, type}` → always 200, sends OTP if email found |
+| POST | /api/auth/verify-otp | `{email, otp, type}` → validates, sets JWT cookie |
+| POST | /api/auth/logout | Clears JWT cookie |
+| GET | /api/auth/me | Returns `{type, id, name}` for current session |
+
+### Dealers
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/register | Public | Register new dealer |
+| GET | /api/dealers | Admin | List all dealers |
+| GET | /api/dealers/:id | Dealer/Admin | Get single dealer |
+| PUT | /api/dealers/:id | Dealer/Admin | Update dealer (validates email uniqueness) |
+| POST | /api/dealers/:id/toggle | Admin | Enable/disable |
+| POST | /api/dealers/:id/activate-subscription | Admin | Manually activate |
+| POST | /api/dealers/:id/reset-subscription | Admin | Reset to free |
+| GET | /api/dealers/:id/leads | Dealer/Admin | Paginated leads for this dealer (`?page=N`, max 100) |
+| GET | /api/dealers/:id/stats | Dealer/Admin | `{total_leads, this_month, subscription_status, subscription_expires_at, lead_count}` |
 
 ### Leads
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | /api/leads | Matched + assigned leads (last 50) |
-| GET | /api/leads/all | All leads (last 500) |
-| GET | /api/leads/unmatched | Unmatched leads only |
-| POST | /api/leads/:id/assign | Assign lead to one dealer (`{dealer_id}`) |
-| POST | /api/leads/:id/assign-many | Assign + email to multiple dealers (`{dealer_ids: []}`) |
-
-### Fetched Posts
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | /api/fetched-posts | All fetched posts (last 200) |
-| POST | /api/fetched-posts/:id/send | Manually send a post to a dealer — runs Gemini for suggested reply (`{dealer_id}`) |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| GET | /api/leads | Admin | All matched+assigned leads (last 50) |
+| GET | /api/leads/all | Admin | All leads (last 500) |
+| GET | /api/leads/unmatched | Admin | Unmatched leads |
+| POST | /api/leads/:id/assign | Admin | Assign to one dealer |
+| POST | /api/leads/:id/assign-many | Admin | Assign + email to multiple dealers |
+| GET | /api/fetched-posts | Admin | Last 200 raw posts |
+| POST | /api/fetched-posts/:id/send | Admin | Manually send post to dealer |
 
 ### Leads Crawler
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/crawl/start | Start continuous leads crawler loop |
-| POST | /api/crawl/stop | Stop leads crawler |
-| GET | /api/crawl/status | `{running, postsCollected, leadsFound, emailsSent, lastBatchAt, currentSource}` |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/crawl/start | Admin | Start continuous loop |
+| POST | /api/crawl/stop | Admin | Stop |
+| GET | /api/crawl/status | Admin | `{running, postsCollected, leadsFound, emailsSent, lastBatchAt, currentSource}` |
 
 ### Dealer Payments
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/payments | Submit UTR (`{dealer_id, utr_number}`) |
-| GET | /api/payments | List all payments with dealer names |
-| POST | /api/payments/:id/verify | Verify + activate subscription + send confirmation email |
-| POST | /api/payments/:id/reject | Reject + send rejection email |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/payments | Public (rate limited) | Submit UTR (validates format) |
+| GET | /api/payments | Admin | List all |
+| POST | /api/payments/:id/verify | Admin | Verify + activate subscription |
+| POST | /api/payments/:id/reject | Admin | Reject + email dealer |
 
 ### Candidates
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/candidates/register | Register new candidate (required: name, emails, role, skills, city) |
-| GET | /api/candidates | List all candidates |
-| GET | /api/candidates/:id | Get single candidate |
-| PUT | /api/candidates/:id | Update candidate fields |
-| POST | /api/candidates/:id/toggle | Enable/disable candidate (`{active: true/false}`) |
-| POST | /api/candidates/:id/activate-subscription | Manually activate 30-day subscription |
-| POST | /api/candidates/:id/reset-subscription | Reset to free tier |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/candidates/register | Public | Register new candidate |
+| GET | /api/candidates | Admin | List all |
+| GET | /api/candidates/:id | Candidate/Admin | Get single |
+| PUT | /api/candidates/:id | Candidate/Admin | Update (validates email uniqueness) |
+| POST | /api/candidates/:id/toggle | Admin | Enable/disable |
+| POST | /api/candidates/:id/activate-subscription | Admin | Manually activate |
+| POST | /api/candidates/:id/reset-subscription | Admin | Reset to free |
+| GET | /api/candidates/:id/job-matches | Candidate/Admin | Paginated job alerts (`?page=N`, max 100) |
+| GET | /api/candidates/:id/stats | Candidate/Admin | `{total_alerts, subscription_status, subscription_expires_at, lead_count, role, city}` |
 
-### Job Matches
+### Jobs Crawler & Matches
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | /api/job-matches | All job matches (last 200) with candidate names |
-
-### Fetched Jobs
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | /api/fetched-jobs | All fetched jobs (last 200) |
-| POST | /api/fetched-jobs/:id/send | Manually send a job to a candidate — no AI tip (`{candidate_id}`) |
-
-### Jobs Crawler
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/jobs/start | Start continuous jobs crawler loop |
-| POST | /api/jobs/stop | Stop jobs crawler |
-| GET | /api/jobs/status | `{running, jobsCollected, matchesFound, emailsSent, lastBatchAt, currentCandidate}` |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/jobs/start | Admin | Start continuous loop |
+| POST | /api/jobs/stop | Admin | Stop |
+| GET | /api/jobs/status | Admin | `{running, jobsCollected, matchesFound, emailsSent, lastBatchAt, currentCandidate}` |
+| GET | /api/job-matches | Admin | All job matches (last 200) |
+| GET | /api/fetched-jobs | Admin | Last 200 raw jobs |
+| POST | /api/fetched-jobs/:id/send | Admin | Manually send job to candidate |
 
 ### Candidate Payments
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/candidate-payments | Submit UTR (`{candidate_id, utr_number}`) |
-| GET | /api/candidate-payments | List all payments with candidate names |
-| POST | /api/candidate-payments/:id/verify | Verify + activate subscription + send confirmation email |
-| POST | /api/candidate-payments/:id/reject | Reject + send rejection email |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/candidate-payments | Public (rate limited) | Submit UTR |
+| GET | /api/candidate-payments | Admin | List all |
+| POST | /api/candidate-payments/:id/verify | Admin | Verify + activate |
+| POST | /api/candidate-payments/:id/reject | Admin | Reject |
 
 ### Admin & Logging
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | /api/admin/cleanup | Delete old fetched_posts (>60 days) and unmatched leads (>90 days) from the sheet |
-| GET | /api/logs | Last 500 log entries as JSON array `[{t, level, msg}]` |
-| GET | /api/logs/stream | SSE stream of live log entries |
-| GET | /api/debug-env | Shows which env vars are set (values masked) — useful for deployment debugging |
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | /api/admin/cleanup | Admin | Delete old data from sheets |
+| GET | /api/logs | Admin | Last 500 log entries `[{t, level, msg}]` |
+| GET | /api/logs/stream | Admin | SSE live log stream |
+| GET | /api/debug-env | Admin | Which env vars are set (values masked) |
 
 ---
 
 ## Subscription Model
-
-Both dealers and candidates use identical subscription logic with slightly different free-tier thresholds.
 
 ### Dealers (Leads Pipeline)
 
@@ -439,46 +409,39 @@ lead_count === 2                                → 'send_with_footer' (email + 
 lead_count > 2                                  → 'skip'
 ```
 
-Free tier: **2 leads** total, then stops.
-
 ### Candidates (Jobs Pipeline)
 
 ```
-subscription_status = 'active' AND not expired  → 'send'   (unlimited job alerts)
-subscription_status = 'active' AND expired      → 'expired' (reset to free, send expiry email)
+subscription_status = 'active' AND not expired  → 'send'
 lead_count < 1                                  → 'send'
-lead_count === 1                                → 'send_with_footer' (email + ₹10 subscribe CTA)
+lead_count === 1                                → 'send_with_footer'
 lead_count > 1                                  → 'skip'
 ```
 
-Free tier: **1 job alert** total, then stops.
-
-### Payment Flow (same for both)
+### Payment Flow
 
 1. User visits `/pay?dealer_id=X` or `/candidate-pay?candidate_id=X`
-2. Scans UPI QR code, pays ₹10, enters UTR number
-3. UTR submitted → stored as `pending` in `payments` / `candidate_payments` tab
-4. Admin verifies in admin panel → subscription activated for 30 days, `lead_count` reset to 0, confirmation email sent
-5. On expiry: detected on next match attempt → subscription reset to free, expiry email sent to user
+2. Scans UPI QR → enters UTR (validated: 8–25 alphanumeric chars)
+3. Admin verifies in admin panel → 30-day subscription activated, `lead_count` reset to 0
 
 ---
 
 ## Admin Panel — Tabs
 
-| Tab | What it shows | Key actions |
-|-----|--------------|-------------|
-| Dealers | All dealers with subscription status, lead count, city | Enable/Disable, Edit, manual subscription controls |
-| Candidates | All candidates with subscription status, lead count, city | Enable/Disable, Edit |
-| Matched Leads | Leads sent to dealers by the pipeline | View only |
-| Unmatched Leads | Leads AI found but no dealer matched | Assign to one or multiple dealers (sends email) |
-| Job Matches | Job alerts sent to candidates | View only |
-| Payments (Dealers) | Dealer UTR submissions | Verify → activate subscription / Reject → rejection email |
-| Payments (Candidates) | Candidate UTR submissions | Verify / Reject |
-| Fetched Posts | Raw Reddit/Instagram posts from every cycle | Send to any dealer (runs Gemini for reply) |
-| Fetched Jobs | Raw Adzuna jobs from every cycle | Send to any candidate (no AI tip) |
-| Logs | Live log stream from logger.js | Real-time crawler activity |
+| Tab | Auth | Key actions |
+|-----|------|-------------|
+| Dealers | Admin | Enable/Disable, Edit, subscription controls |
+| Candidates | Admin | Enable/Disable, Edit |
+| Matched Leads | Admin | View only |
+| Unmatched Leads | Admin | Assign to one or multiple dealers |
+| Job Matches | Admin | View only |
+| Payments (Dealers) | Admin | Verify / Reject |
+| Payments (Candidates) | Admin | Verify / Reject |
+| Fetched Posts | Admin | Send to any dealer (runs Gemini for reply) |
+| Fetched Jobs | Admin | Send to any candidate |
+| Logs | Admin | Real-time crawler activity via SSE |
 
-**Header buttons:** Start/Stop Leads Crawler, Start/Stop Jobs Crawler, Cleanup Old Data (with confirmation dialog).
+Admin panel is hidden until auth confirms (`visibility:hidden` until JWT verified).
 
 ---
 
@@ -496,65 +459,59 @@ Retail & E-commerce, Other
 
 ## Key Design Decisions
 
-- **Google Sheets as database** — no SQLite, no Postgres. Easy to inspect and edit manually. Trade-off: non-atomic writes can cause duplicate IDs under concurrent writes.
-- **Continuous loops, not cron** — both crawlers run as async while-loops with sleep between cycles. Start/stop via API. Status visible in real time.
-- **Single-phase AI (Leads)** — `matcher.js` now handles everything in one Gemini batch call (lead classification + dealer matching). Previously this was two phases: Gemini then Claude Haiku via tool use.
-- **Batch AI (Jobs)** — all candidate+job pairs in a cycle are scored in a single Gemini call, with one retry on failure.
-- **Adzuna, not Indeed** — `indeed-fetcher.js` calls `api.adzuna.com`. The file name is a legacy artifact from when it used the Indeed API.
-- **No Reddit credentials required** — works with public endpoints. Add `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` for higher rate limits; crawler automatically uses OAuth when both are set.
-- **Instagram is non-fatal** — all Instagram errors are caught; the leads pipeline continues without it.
-- **logger.js must be required first** — it monkey-patches `console.log/warn/error` globally so all modules are captured automatically.
-- **In-memory seen sets** — `seenPosts`, `seenJobs`, `seenFetchedJobs` are loaded from Sheets on startup and kept in memory for the process lifetime. Re-fetching within a session uses the in-memory check, not a Sheets query.
-- **Factory pattern for tests** — `createApp()` in server.js; tests use `jest.mock('./sheets')` to inject mock data without hitting Google Sheets.
+- **JWT stateless auth** — no session store, scales to 1000s of users, server restarts don't log users out
+- **OTP via email** — no passwords to manage. Dealers/candidates use their registered email; admin uses `ADMIN_EMAIL` env var
+- **Google Sheets as database** — no SQLite, no Postgres. Easy to inspect manually. Non-atomic writes can produce duplicate IDs under concurrency.
+- **Continuous loops, not cron** — both crawlers run as async while-loops. Start/stop via API.
+- **Single-phase AI (Leads)** — Gemini batch call handles lead classification + dealer matching in one request
+- **Batch AI (Jobs)** — all candidate+job pairs scored in a single Gemini call per cycle
+- **Adzuna, not Indeed** — `indeed-fetcher.js` calls `api.adzuna.com` (legacy name)
+- **Email on Render** — Gmail SMTP is blocked on Render free tier. Use `RESEND_API_KEY` to route via Resend SMTP. Domain verification needed to send to all users.
+- **OTP fire-and-forget** — email sent in background so response is immediate regardless of SMTP speed
+- **logger.js must be required first** — monkey-patches `console.log/warn/error` globally
 
 ---
 
 ## Tests
 
 ```bash
-npm test   # jest --runInBand (sequential — important because tests share mocked module state)
+npm test   # jest --runInBand
 ```
 
-11 test files in `tests/`:
+12 test files, 151 tests. All pass. Protected routes in `server.test.js` use an admin JWT cookie header.
 
-| File | What it tests |
-|------|--------------|
-| `server.test.js` | All API routes end-to-end |
-| `crawler.test.js` | Leads crawler cycle, subscription check for dealers |
-| `jobs-crawler.test.js` | Jobs crawler cycle, subscription check for candidates |
-| `matcher.test.js` | Gemini lead classification batch (mocked AI) |
-| `job-matcher.test.js` | Gemini job relevance scoring batch (mocked AI) |
-| `indeed-fetcher.test.js` | Adzuna API fetch (mocked fetch) |
-| `instagram.test.js` | Instagram fetcher (mocked child_process) |
-| `mailer.test.js` | Email sending (mocked nodemailer) |
-| `prefilter.test.js` | Keyword intent filter logic |
-| `sheets.test.js` | Google Sheets CRUD (mocked googleapis) |
-| `subreddits.test.js` | Subreddit list builder |
+```js
+// Pattern used in server.test.js for protected routes:
+process.env.SESSION_SECRET = 'test-secret';
+const jwt = require('jsonwebtoken');
+const adminToken = jwt.sign({ type: 'admin', id: 0 }, 'test-secret');
+request(app).get('/api/dealers').set('Cookie', `cm_auth=${adminToken}`)
+```
 
 ---
 
 ## Common Issues
 
-**Crawler runs but finds 0 leads**
-The `seenPosts` in-memory set is pre-loaded from `fetched_posts` on startup. If all current Reddit posts were already fetched in previous sessions, they're skipped. Check the Fetched Posts admin tab to see what's coming in. Old entries auto-clean after 60 days.
+**Admin login "email not found"**
+Check `ADMIN_EMAIL` env var is set on Render. Must exactly match what you type in the login form.
 
-**Google Sheets: `SPREADSHEET_ID` not set**
-Run the server once with `GOOGLE_CREDENTIALS_JSON` or `GOOGLE_CREDENTIALS_PATH` set but without `SPREADSHEET_ID`. The server auto-creates the sheet, logs its ID, and exits with `process.exit(0)`. Copy the ID to `.env` then restart normally.
+**OTP email not arriving on Render**
+Gmail SMTP is blocked on Render's free tier. Set `RESEND_API_KEY` on Render. With Resend's `onboarding@resend.dev` sender, emails only deliver to the Resend account owner's email. To send to all users, verify a custom domain in Resend.
+
+**OTP shows "Sending…" indefinitely**
+Fixed — OTP email is now sent in background. If stuck, check Render logs for `[auth] OTP email failed:` error.
+
+**Admin panel briefly visible before redirect**
+Not a data leak — all API calls require auth so 401 is returned. Panel body is hidden with `visibility:hidden` until auth check completes.
+
+**Crawler runs but finds 0 leads**
+`seenPosts` in-memory set is pre-loaded from `fetched_posts` on startup. Old posts auto-clean after 60 days.
 
 **Sheets write errors / duplicate IDs**
-`appendRow()` is non-atomic. Avoid parallel writes to the same tab. The jobs crawler awaits `saveFetchedJob()` sequentially for this reason.
-
-**Email not sending**
-`SMTP_PASS` must be a Gmail App Password (16-char code from Google Account → Security → 2-Step → App passwords), not your regular Gmail password.
-
-**Jobs crawler: 0 jobs collected**
-`ADZUNA_APP_ID` and `ADZUNA_APP_KEY` must both be set. Verify at `/api/debug-env` — `HAS_ADZUNA` should be `true`.
-
-**Instagram not working**
-`INSTAGRAM_USERNAME` and `INSTAGRAM_PASSWORD` must be set. Failures are non-fatal. Check the Logs tab for `[crawler] Instagram failed:` messages. The session file `instagram_session.json` is created after first successful login.
-
-**Subscription expiry warning sent repeatedly after restart**
-The `warnedDealers` / `warnedCandidates` Sets are in-memory and reset on server restart. Each fresh start re-sends warnings for subscriptions expiring within 3 days. This is by design.
+`appendRow()` is non-atomic. Avoid parallel writes to the same tab.
 
 **`/api/debug-env` shows what's set**
-Use this endpoint to quickly verify all credentials are loaded correctly on any environment (local or Render).
+Use this endpoint to verify all credentials are loaded on any environment. Requires admin auth.
+
+**Server refuses to start**
+`SESSION_SECRET` must be set. Server calls `process.exit(1)` if missing.

@@ -1,6 +1,11 @@
 const request = require('supertest');
 const { createApp } = require('../server');
 
+process.env.SESSION_SECRET = 'test-secret';
+const jwt = require('jsonwebtoken');
+const adminToken = jwt.sign({ type: 'admin', id: 0 }, 'test-secret');
+const adminCookie = `cm_auth=${adminToken}`;
+
 jest.mock('../sheets', () => ({
   initSheets: jest.fn().mockResolvedValue(),
   getDealers: jest.fn().mockResolvedValue([]),
@@ -48,6 +53,9 @@ jest.mock('../sheets', () => ({
   verifyCandidatePayment: jest.fn().mockResolvedValue(),
   rejectCandidatePayment: jest.fn().mockResolvedValue(),
   cleanupOldData: jest.fn().mockResolvedValue({ deleted_fetched: 0, deleted_unmatched: 0 }),
+  readSheet: jest.fn().mockResolvedValue([]),
+  getDealerLeads: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getCandidateJobMatches: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pages: 0 }),
 }));
 
 jest.mock('../crawler', () => ({
@@ -113,13 +121,13 @@ test('GET /api/dealers returns dealer list', async () => {
   sheetsModule.getDealers.mockResolvedValue([
     { id: '1', name: 'Test Co', city: 'Faridabad', active: '1' },
   ]);
-  const res = await request(app).get('/api/dealers');
+  const res = await request(app).get('/api/dealers').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body).toHaveLength(1);
 });
 
 test('GET /api/crawl/status returns status object with running field', async () => {
-  const res = await request(app).get('/api/crawl/status');
+  const res = await request(app).get('/api/crawl/status').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body).toHaveProperty('running', false);
   expect(res.body).toHaveProperty('postsCollected');
@@ -127,7 +135,7 @@ test('GET /api/crawl/status returns status object with running field', async () 
 
 test('POST /api/crawl/start returns success and calls startCrawler', async () => {
   const { startCrawler } = require('../crawler');
-  const res = await request(app).post('/api/crawl/start');
+  const res = await request(app).post('/api/crawl/start').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
   expect(startCrawler).toHaveBeenCalled();
@@ -135,7 +143,7 @@ test('POST /api/crawl/start returns success and calls startCrawler', async () =>
 
 test('POST /api/crawl/stop returns success and calls stopCrawler', async () => {
   const { stopCrawler } = require('../crawler');
-  const res = await request(app).post('/api/crawl/stop');
+  const res = await request(app).post('/api/crawl/stop').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
   expect(stopCrawler).toHaveBeenCalled();
@@ -156,7 +164,7 @@ test('POST /api/payments submits UTR', async () => {
 test('POST /api/payments/:id/verify activates subscription', async () => {
   sheetsModule.getPayment.mockResolvedValue({ id: 5, dealer_id: 1, utr_number: 'UTR456', status: 'pending' });
   sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
-  const res = await request(app).post('/api/payments/5/verify').send({});
+  const res = await request(app).post('/api/payments/5/verify').set('Cookie', adminCookie).send({});
   expect(res.status).toBe(200);
   expect(sheetsModule.verifyPayment).toHaveBeenCalledWith(5);
   expect(sheetsModule.activateDealerSubscription).toHaveBeenCalledWith(1);
@@ -166,26 +174,26 @@ test('POST /api/payments/:id/verify activates subscription', async () => {
 test('POST /api/payments/:id/reject sets status rejected', async () => {
   sheetsModule.getPayment.mockResolvedValue({ id: 6, dealer_id: 1, utr_number: 'UTR789', status: 'pending' });
   sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
-  const res = await request(app).post('/api/payments/6/reject').send({});
+  const res = await request(app).post('/api/payments/6/reject').set('Cookie', adminCookie).send({});
   expect(res.status).toBe(200);
   expect(sheetsModule.rejectPayment).toHaveBeenCalledWith(6);
   expect(mailerModule.sendPaymentRejectedEmail).toHaveBeenCalled();
 });
 
 test('GET /api/leads/unmatched returns unmatched leads', async () => {
-  const res = await request(app).get('/api/leads/unmatched');
+  const res = await request(app).get('/api/leads/unmatched').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(Array.isArray(res.body)).toBe(true);
 });
 
 test('POST /api/leads/:id/assign assigns lead to dealer', async () => {
-  const res = await request(app).post('/api/leads/10/assign').send({ dealer_id: 1 });
+  const res = await request(app).post('/api/leads/10/assign').set('Cookie', adminCookie).send({ dealer_id: 1 });
   expect(res.status).toBe(200);
   expect(sheetsModule.assignLead).toHaveBeenCalledWith(10, 1);
 });
 
 test('GET /api/payments returns payment list', async () => {
-  const res = await request(app).get('/api/payments');
+  const res = await request(app).get('/api/payments').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(Array.isArray(res.body)).toBe(true);
 });
@@ -206,7 +214,7 @@ test('POST /api/candidates/register creates a candidate', async () => {
 
 test('GET /api/candidates returns candidate list', async () => {
   sheetsModule.getCandidates.mockResolvedValue([{ id: '1', name: 'John Dev', active: '1' }]);
-  const res = await request(app).get('/api/candidates');
+  const res = await request(app).get('/api/candidates').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body).toHaveLength(1);
   expect(res.body[0].name).toBe('John Dev');
@@ -226,7 +234,7 @@ describe('GET /api/fetched-jobs', () => {
     sheets.getFetchedJobs.mockResolvedValue([
       { id: '1', job_id: 'adzuna_1', job_title: 'React Dev', company: 'Startup', location: 'Pune', job_url: 'http://a', snippet: 'React needed', fetched_at: '2026-05-29T00:00:00Z' },
     ]);
-    const res = await request(app).get('/api/fetched-jobs');
+    const res = await request(app).get('/api/fetched-jobs').set('Cookie', adminCookie);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].job_title).toBe('React Dev');
@@ -246,24 +254,24 @@ describe('POST /api/fetched-jobs/:id/send', () => {
   });
 
   test('returns 400 if candidate_id missing', async () => {
-    const res = await request(app).post('/api/fetched-jobs/3/send').send({});
+    const res = await request(app).post('/api/fetched-jobs/3/send').set('Cookie', adminCookie).send({});
     expect(res.status).toBe(400);
   });
 
   test('returns 404 if job not found', async () => {
     sheets.getFetchedJob.mockResolvedValue(null);
-    const res = await request(app).post('/api/fetched-jobs/99/send').send({ candidate_id: 1 });
+    const res = await request(app).post('/api/fetched-jobs/99/send').set('Cookie', adminCookie).send({ candidate_id: 1 });
     expect(res.status).toBe(404);
   });
 
   test('returns 404 if candidate not found', async () => {
     sheets.getCandidate.mockResolvedValue(null);
-    const res = await request(app).post('/api/fetched-jobs/3/send').send({ candidate_id: 99 });
+    const res = await request(app).post('/api/fetched-jobs/3/send').set('Cookie', adminCookie).send({ candidate_id: 99 });
     expect(res.status).toBe(404);
   });
 
   test('saves job match and sends email', async () => {
-    const res = await request(app).post('/api/fetched-jobs/3/send').send({ candidate_id: 1 });
+    const res = await request(app).post('/api/fetched-jobs/3/send').set('Cookie', adminCookie).send({ candidate_id: 1 });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(sheets.saveJobMatch).toHaveBeenCalledWith(expect.objectContaining({

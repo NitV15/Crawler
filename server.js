@@ -13,6 +13,7 @@ const {
   activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
   saveJobMatch, getJobMatches,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
+  getDealerLeads, getCandidateJobMatches, readSheet,
 } = require('./sheets');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('./jobs-crawler');
@@ -143,6 +144,60 @@ function createApp() {
     res.sendFile(path.join(__dirname, 'public', 'candidate-pay.html'));
   });
 
+  // ── Dealer portal data ─────────────────────────────────────────────────────────
+
+  app.get('/api/dealers/:id/leads', requireAuth('dealer', 'admin'), async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      res.json(await getDealerLeads(parseInt(req.params.id), page));
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
+  });
+
+  app.get('/api/dealers/:id/stats', requireAuth('dealer', 'admin'), async (req, res) => {
+    try {
+      const dealer = await getDealer(parseInt(req.params.id));
+      if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
+      const allLeads = await readSheet('leads');
+      const myLeads = allLeads.filter(r => String(r.dealer_id) === String(req.params.id));
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const thisMonth = myLeads.filter(r => r.emailed_at >= monthStart).length;
+      res.json({
+        total_leads: myLeads.length,
+        this_month: thisMonth,
+        subscription_status: dealer.subscription_status,
+        subscription_expires_at: dealer.subscription_expires_at,
+        lead_count: dealer.lead_count,
+      });
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch stats' }); }
+  });
+
+  // ── Candidate portal data ──────────────────────────────────────────────────────
+
+  app.get('/api/candidates/:id/job-matches', requireAuth('candidate', 'admin'), async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      res.json(await getCandidateJobMatches(parseInt(req.params.id), page));
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
+  });
+
+  app.get('/api/candidates/:id/stats', requireAuth('candidate', 'admin'), async (req, res) => {
+    try {
+      const candidate = await getCandidate(parseInt(req.params.id));
+      if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+      const allMatches = await readSheet('job_matches');
+      const myMatches = allMatches.filter(r => String(r.candidate_id) === String(req.params.id));
+      res.json({
+        total_alerts: myMatches.length,
+        subscription_status: candidate.subscription_status,
+        subscription_expires_at: candidate.subscription_expires_at,
+        lead_count: candidate.lead_count,
+        role: candidate.role,
+        city: candidate.city,
+      });
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch stats' }); }
+  });
+
   app.post('/api/register', async (req, res) => {
     const { name, emails, industry_category, services, keywords, state, city, target_customers, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category || !services || !keywords || !state || !city) {
@@ -156,23 +211,23 @@ function createApp() {
     }
   });
 
-  app.get('/api/dealers', async (req, res) => {
+  app.get('/api/dealers', requireAuth('admin'), async (req, res) => {
     try { res.json(await getDealers()); } catch (err) { res.status(500).json({ error: 'Failed to fetch dealers' }); }
   });
 
-  app.get('/api/leads', async (req, res) => {
+  app.get('/api/leads', requireAuth('admin'), async (req, res) => {
     try { res.json(await getLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
-  app.get('/api/leads/all', async (req, res) => {
+  app.get('/api/leads/all', requireAuth('admin'), async (req, res) => {
     try { res.json(await getAllLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
-  app.get('/api/leads/unmatched', async (req, res) => {
+  app.get('/api/leads/unmatched', requireAuth('admin'), async (req, res) => {
     try { res.json(await getUnmatchedLeads()); } catch (err) { res.status(500).json({ error: 'Failed to fetch unmatched leads' }); }
   });
 
-  app.post('/api/dealers/:id/toggle', async (req, res) => {
+  app.post('/api/dealers/:id/toggle', requireAuth('admin'), async (req, res) => {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
     try {
       await toggleDealer(parseInt(req.params.id), req.body.active);
@@ -182,7 +237,7 @@ function createApp() {
     }
   });
 
-  app.put('/api/dealers/:id', async (req, res) => {
+  app.put('/api/dealers/:id', requireAuth('dealer', 'admin'), async (req, res) => {
     const { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
     if (!name || !emails || !industry_category) return res.status(400).json({ error: 'name, emails, industry_category required' });
     try {
@@ -193,7 +248,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/dealers/:id/activate-subscription', async (req, res) => {
+  app.post('/api/dealers/:id/activate-subscription', requireAuth('admin'), async (req, res) => {
     try {
       await activateDealerSubscription(parseInt(req.params.id));
       res.json({ success: true });
@@ -202,7 +257,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/dealers/:id/reset-subscription', async (req, res) => {
+  app.post('/api/dealers/:id/reset-subscription', requireAuth('admin'), async (req, res) => {
     try {
       await resetDealerSubscription(parseInt(req.params.id));
       res.json({ success: true });
@@ -211,17 +266,17 @@ function createApp() {
     }
   });
 
-  app.post('/api/crawl/start', (req, res) => {
+  app.post('/api/crawl/start', requireAuth('admin'), (req, res) => {
     startCrawler().catch(err => console.error('[server] Crawler error:', err.message));
     res.json({ success: true });
   });
 
-  app.post('/api/crawl/stop', (req, res) => {
+  app.post('/api/crawl/stop', requireAuth('admin'), (req, res) => {
     stopCrawler();
     res.json({ success: true });
   });
 
-  app.get('/api/crawl/status', (req, res) => {
+  app.get('/api/crawl/status', requireAuth('admin'), (req, res) => {
     res.json(getCrawlerStatus());
   });
 
@@ -229,7 +284,7 @@ function createApp() {
     res.sendFile(path.join(__dirname, 'public', 'pay.html'));
   });
 
-  app.get('/api/dealers/:id', async (req, res) => {
+  app.get('/api/dealers/:id', requireAuth('dealer', 'admin'), async (req, res) => {
     try {
       const dealer = await getDealer(parseInt(req.params.id));
       if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
@@ -250,11 +305,11 @@ function createApp() {
     }
   });
 
-  app.get('/api/payments', async (req, res) => {
+  app.get('/api/payments', requireAuth('admin'), async (req, res) => {
     try { res.json(await getPayments()); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
   });
 
-  app.post('/api/payments/:id/verify', async (req, res) => {
+  app.post('/api/payments/:id/verify', requireAuth('admin'), async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
       const payment = await getPayment(payId);
@@ -269,7 +324,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/payments/:id/reject', async (req, res) => {
+  app.post('/api/payments/:id/reject', requireAuth('admin'), async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
       const payment = await getPayment(payId);
@@ -283,7 +338,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/admin/cleanup', async (req, res) => {
+  app.post('/api/admin/cleanup', requireAuth('admin'), async (req, res) => {
     try {
       const result = await cleanupOldData();
       res.json(result);
@@ -292,15 +347,15 @@ function createApp() {
     }
   });
 
-  app.get('/api/fetched-posts', async (req, res) => {
+  app.get('/api/fetched-posts', requireAuth('admin'), async (req, res) => {
     try { res.json(await getFetchedPosts()); } catch (err) { res.status(500).json({ error: 'Failed to fetch posts' }); }
   });
 
-  app.get('/api/fetched-jobs', async (req, res) => {
+  app.get('/api/fetched-jobs', requireAuth('admin'), async (req, res) => {
     try { res.json(await getFetchedJobs()); } catch (err) { res.status(500).json({ error: 'Failed to fetch jobs' }); }
   });
 
-  app.post('/api/fetched-jobs/:id/send', async (req, res) => {
+  app.post('/api/fetched-jobs/:id/send', requireAuth('admin'), async (req, res) => {
     const { candidate_id } = req.body;
     if (!candidate_id) return res.status(400).json({ error: 'candidate_id required' });
     try {
@@ -332,7 +387,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/fetched-posts/:id/send', async (req, res) => {
+  app.post('/api/fetched-posts/:id/send', requireAuth('admin'), async (req, res) => {
     const { dealer_id } = req.body;
     if (!dealer_id) return res.status(400).json({ error: 'dealer_id required' });
     try {
@@ -376,11 +431,11 @@ function createApp() {
     }
   });
 
-  app.get('/api/logs', (req, res) => {
+  app.get('/api/logs', requireAuth('admin'), (req, res) => {
     res.json(getLogs());
   });
 
-  app.get('/api/logs/stream', (req, res) => {
+  app.get('/api/logs/stream', requireAuth('admin'), (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -393,7 +448,7 @@ function createApp() {
     req.on('close', unsub);
   });
 
-  app.post('/api/leads/:id/assign', async (req, res) => {
+  app.post('/api/leads/:id/assign', requireAuth('admin'), async (req, res) => {
     const leadId = parseInt(req.params.id);
     const { dealer_id } = req.body;
     if (!dealer_id) return res.status(400).json({ error: 'dealer_id required' });
@@ -405,7 +460,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/leads/:id/assign-many', async (req, res) => {
+  app.post('/api/leads/:id/assign-many', requireAuth('admin'), async (req, res) => {
     const leadId = parseInt(req.params.id);
     const { dealer_ids } = req.body;
     if (!Array.isArray(dealer_ids) || !dealer_ids.length) {
@@ -482,11 +537,11 @@ function createApp() {
     }
   });
 
-  app.get('/api/candidates', async (req, res) => {
+  app.get('/api/candidates', requireAuth('admin'), async (req, res) => {
     try { res.json(await getCandidates()); } catch (err) { res.status(500).json({ error: 'Failed to fetch candidates' }); }
   });
 
-  app.get('/api/candidates/:id', async (req, res) => {
+  app.get('/api/candidates/:id', requireAuth('candidate', 'admin'), async (req, res) => {
     try {
       const c = await getCandidate(parseInt(req.params.id));
       if (!c) return res.status(404).json({ error: 'Candidate not found' });
@@ -496,7 +551,7 @@ function createApp() {
     }
   });
 
-  app.put('/api/candidates/:id', async (req, res) => {
+  app.put('/api/candidates/:id', requireAuth('candidate', 'admin'), async (req, res) => {
     const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
     if (!name || !emails || !role) return res.status(400).json({ error: 'name, emails, role required' });
     try {
@@ -507,7 +562,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/candidates/:id/toggle', async (req, res) => {
+  app.post('/api/candidates/:id/toggle', requireAuth('admin'), async (req, res) => {
     if (req.body.active === undefined) return res.status(400).json({ error: 'active field required' });
     try {
       await toggleCandidate(parseInt(req.params.id), req.body.active);
@@ -517,7 +572,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/candidates/:id/activate-subscription', async (req, res) => {
+  app.post('/api/candidates/:id/activate-subscription', requireAuth('admin'), async (req, res) => {
     try {
       await activateCandidateSubscription(parseInt(req.params.id));
       res.json({ success: true });
@@ -526,7 +581,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/candidates/:id/reset-subscription', async (req, res) => {
+  app.post('/api/candidates/:id/reset-subscription', requireAuth('admin'), async (req, res) => {
     try {
       await resetCandidateSubscription(parseInt(req.params.id));
       res.json({ success: true });
@@ -537,7 +592,7 @@ function createApp() {
 
   // ── Job Matches ───────────────────────────────────────────────────────────────
 
-  app.get('/api/job-matches', async (req, res) => {
+  app.get('/api/job-matches', requireAuth('admin'), async (req, res) => {
     try { res.json(await getJobMatches()); } catch (err) { res.status(500).json({ error: 'Failed to fetch job matches' }); }
   });
 
@@ -554,11 +609,11 @@ function createApp() {
     }
   });
 
-  app.get('/api/candidate-payments', async (req, res) => {
+  app.get('/api/candidate-payments', requireAuth('admin'), async (req, res) => {
     try { res.json(await getCandidatePayments()); } catch (err) { res.status(500).json({ error: 'Failed to fetch payments' }); }
   });
 
-  app.post('/api/candidate-payments/:id/verify', async (req, res) => {
+  app.post('/api/candidate-payments/:id/verify', requireAuth('admin'), async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
       const payment = await getCandidatePayment(payId);
@@ -573,7 +628,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/candidate-payments/:id/reject', async (req, res) => {
+  app.post('/api/candidate-payments/:id/reject', requireAuth('admin'), async (req, res) => {
     const payId = parseInt(req.params.id);
     try {
       const payment = await getCandidatePayment(payId);

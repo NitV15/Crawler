@@ -496,8 +496,31 @@ async function cleanupOldData() {
   return { deleted_fetched: oldFetched.length, deleted_unmatched: oldLeads.length };
 }
 
+async function getDealerLeads(dealerId, page = 1) {
+  const PAGE_SIZE = 20;
+  const rows = await readSheet('leads');
+  const filtered = rows
+    .filter(r => String(r.dealer_id) === String(dealerId) && (r.status === 'matched' || r.status === 'assigned'))
+    .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  const total = filtered.length;
+  const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) };
+}
+
+async function getCandidateJobMatches(candidateId, page = 1) {
+  const PAGE_SIZE = 20;
+  const rows = await readSheet('job_matches');
+  const filtered = rows
+    .filter(r => String(r.candidate_id) === String(candidateId))
+    .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  const total = filtered.length;
+  const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) };
+}
+
 module.exports = {
   initSheets,
+  readSheet,
   getDealers, getActiveDealers, getDealer, addDealer, updateDealer, toggleDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead,
@@ -509,4 +532,5 @@ module.exports = {
   saveJobMatch, getJobMatches, isSeenJob, markJobSeen,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
   cleanupOldData,
+  getDealerLeads, getCandidateJobMatches,
 };

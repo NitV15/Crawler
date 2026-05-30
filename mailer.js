@@ -235,6 +235,24 @@ async function sendCandidateExpiredEmail(candidate, paymentLink) {
   });
 }
 
+async function sendOtpEmail(email, otp) {
+  const transport = createTransport();
+  await transport.sendMail({
+    from: `"Connect Market" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: `Your Connect Market login code: ${otp}`,
+    text: `Your one-time login code is:\n\n  ${otp}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.\n— Connect Market`,
+    html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px">
+      <h2 style="color:#111;margin-bottom:8px">Connect Market</h2>
+      <p style="color:#555;margin-bottom:24px">Your one-time login code:</p>
+      <div style="background:#f5f7fa;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px">
+        <span style="font-size:36px;font-weight:800;letter-spacing:8px;color:#4f6ef7">${otp}</span>
+      </div>
+      <p style="color:#888;font-size:13px">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>
+    </div>`,
+  });
+}
+
 module.exports = {
   sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail, buildEmailText,
   sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail,
@@ -242,4 +260,5 @@ module.exports = {
   sendJobAlertEmail, sendCandidateSubscriptionConfirmationEmail, sendCandidatePaymentRejectedEmail,
   sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail,
   buildCandidateExpiryWarningText, buildCandidateExpiredText,
+  sendOtpEmail,
 };

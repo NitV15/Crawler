@@ -1,5 +1,5 @@
-jest.mock('@google/genai');
-const { GoogleGenAI } = require('@google/genai');
+jest.mock('groq-sdk');
+const Groq = require('groq-sdk');
 const { processJobBatch } = require('../job-matcher');
 
 const fakePairs = [
@@ -13,22 +13,24 @@ const fakePairs = [
   },
 ];
 
-function mockGemini(text) {
-  GoogleGenAI.mockImplementation(() => ({
-    models: { generateContent: jest.fn().mockResolvedValue({ text }) },
+function mockGroq(text) {
+  Groq.mockImplementation(() => ({
+    chat: { completions: { create: jest.fn().mockResolvedValue({
+      choices: [{ message: { content: text } }],
+    }) } },
   }));
 }
 
-beforeEach(() => { jest.clearAllMocks(); process.env.GEMINI_API_KEY = 'test'; });
+beforeEach(() => { jest.clearAllMocks(); process.env.GROQ_API_KEY = 'test'; });
 
-test('returns empty array for empty input without calling Gemini', async () => {
+test('returns empty array for empty input without calling Groq', async () => {
   const result = await processJobBatch([]);
   expect(result).toEqual([]);
-  expect(GoogleGenAI).not.toHaveBeenCalled();
+  expect(Groq).not.toHaveBeenCalled();
 });
 
 test('returns parsed results for valid batch', async () => {
-  mockGemini(JSON.stringify([
+  mockGroq(JSON.stringify([
     { index: 0, is_relevant: true, suggested_tip: 'Highlight K8s cluster management.' },
     { index: 1, is_relevant: false },
   ]));
@@ -40,22 +42,23 @@ test('returns parsed results for valid batch', async () => {
 });
 
 test('strips markdown code fences before parsing', async () => {
-  mockGemini('```json\n[{"index":0,"is_relevant":true,"suggested_tip":"Great match!"}]\n```');
+  mockGroq('```json\n[{"index":0,"is_relevant":true,"suggested_tip":"Great match!"}]\n```');
   const result = await processJobBatch([fakePairs[0]]);
   expect(result[0].is_relevant).toBe(true);
 });
 
 test('retries on parse failure then returns empty array', async () => {
   jest.useFakeTimers();
-  GoogleGenAI.mockImplementation(() => ({
-    models: { generateContent: jest.fn().mockResolvedValue({ text: 'not json' }) },
+  Groq.mockImplementation(() => ({
+    chat: { completions: { create: jest.fn().mockResolvedValue({
+      choices: [{ message: { content: 'not json' } }],
+    }) } },
   }));
   const promise = processJobBatch(fakePairs);
   await jest.runAllTimersAsync();
   const result = await promise;
   jest.useRealTimers();
   expect(result).toEqual([]);
-  const genAI = GoogleGenAI.mock.results[0].value;
-  // 3 total attempts (initial + 2 retries) for the one chunk
-  expect(genAI.models.generateContent).toHaveBeenCalledTimes(3);
+  const groq = Groq.mock.results[0].value;
+  expect(groq.chat.completions.create).toHaveBeenCalledTimes(3);
 });

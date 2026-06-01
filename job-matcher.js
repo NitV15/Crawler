@@ -39,9 +39,11 @@ ${JSON.stringify(pairList)}`;
     temperature: 0.1,
   });
 
-  const text = completion.choices[0].message.content.trim()
-    .replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
-  return JSON.parse(text);
+  const raw = completion.choices[0].message.content;
+  // Extract the JSON array even if the model appends explanatory text after it
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error(`No JSON array in response: ${raw.slice(0, 200)}`);
+  return JSON.parse(match[0]);
 }
 
 async function callWithRetry(client, chunk, attempt = 0) {

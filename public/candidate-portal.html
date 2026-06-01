@@ -85,8 +85,8 @@
     <div class="idle-title">Still there?</div>
     <div class="idle-sub">You've been inactive for 15 minutes.<br>You'll be logged out in <strong id="idle-warn-s" style="color:var(--warn)">60</strong> seconds.</div>
     <div class="idle-actions">
-      <button class="idle-logout" onclick="CmAuth.logout('/candidate-login.html')">Logout now</button>
-      <button class="idle-stay" onclick="CmAuth.dismissCountdown('/candidate-login.html')">Stay logged in</button>
+      <button class="idle-logout" onclick="CmAuth.logout('/candidate-login')">Logout now</button>
+      <button class="idle-stay" onclick="CmAuth.dismissCountdown('/candidate-login')">Stay logged in</button>
     </div>
   </div>
 </div>
@@ -134,7 +134,7 @@
       </div>
       <div class="dropdown" id="user-dropdown">
         <a onclick="openModal()">✏️ Edit Profile</a>
-        <a onclick="CmAuth.logout('/candidate-login.html')">🚪 Logout</a>
+        <a onclick="CmAuth.logout('/candidate-login')">🚪 Logout</a>
       </div>
     </div>
   </div>
@@ -172,12 +172,12 @@
   let candidateId, currentPage = 1, totalPages = 1, candidateData;
 
   async function init() {
-    const user = await CmAuth.requirePortalAuth('candidate', '/candidate-login.html');
+    const user = await CmAuth.requirePortalAuth('candidate', '/candidate-login');
     if (!user) return;
     candidateId = user.id;
     document.getElementById('user-name').textContent = user.name;
     document.body.style.visibility = 'visible';
-    CmAuth.initIdleTimer('/candidate-login.html');
+    CmAuth.initIdleTimer('/candidate-login');
     await Promise.all([loadStats(), loadLeads(1)]);
   }
 

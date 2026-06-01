@@ -88,7 +88,7 @@
   CmAuth.initTheme();
 
   fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(u => {
-    if (u && u.type === 'candidate') window.location.href = '/candidate-portal.html';
+    if (u && u.type === 'candidate') window.location.href = '/candidate-portal';
   }).catch(() => {});
 
   let currentEmail = '';
@@ -142,7 +142,7 @@
         body: JSON.stringify({ email: currentEmail, otp, type: 'candidate' }),
       });
       if (!res.ok) { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; return; }
-      window.location.href = '/candidate-portal.html';
+      window.location.href = '/candidate-portal';
     } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; }
   }
 

@@ -84,7 +84,7 @@
   CmAuth.initTheme();
 
   fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(u => {
-    if (u && u.type === 'admin') window.location.href = '/admin.html';
+    if (u && u.type === 'admin') window.location.href = '/admin';
   }).catch(() => {});
 
   let currentEmail = '';
@@ -138,7 +138,7 @@
         body: JSON.stringify({ email: currentEmail, otp, type: 'admin' }),
       });
       if (!res.ok) { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; return; }
-      window.location.href = '/admin.html';
+      window.location.href = '/admin';
     } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; }
   }
 

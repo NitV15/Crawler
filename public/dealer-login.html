@@ -53,7 +53,7 @@
   <button class="btn" id="send-btn" onclick="sendOtp()" style="margin-top:14px">Send OTP →</button>
   <div class="divider"><span>or</span></div>
   <div style="text-align:center">
-    <a href="/register.html" class="link">New dealer? Register here →</a>
+    <a href="/register" class="link">New dealer? Register here →</a>
   </div>
 </div>
 
@@ -88,7 +88,7 @@
   CmAuth.initTheme();
 
   fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(u => {
-    if (u && u.type === 'dealer') window.location.href = '/dealer-portal.html';
+    if (u && u.type === 'dealer') window.location.href = '/dealer-portal';
   }).catch(() => {});
 
   let currentEmail = '';
@@ -142,7 +142,7 @@
         body: JSON.stringify({ email: currentEmail, otp, type: 'dealer' }),
       });
       if (!res.ok) { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; return; }
-      window.location.href = '/dealer-portal.html';
+      window.location.href = '/dealer-portal';
     } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; }
   }
 

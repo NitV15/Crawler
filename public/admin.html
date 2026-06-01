@@ -165,8 +165,8 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div style="color:#fff;font-weight:700;font-size:15px;margin-bottom:8px">Still there?</div>
     <div style="color:#7c7caa;font-size:12px;margin-bottom:20px">Inactive for 15 minutes. Logging out in <strong id="idle-warn-s" style="color:#f59e0b">60</strong>s.</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button onclick="CmAuth.logout('/admin-login.html')" style="background:#1e1e45;border:none;border-radius:8px;padding:10px;color:#7c7caa;font-size:12px;font-weight:600;cursor:pointer">Logout</button>
-      <button onclick="CmAuth.dismissCountdown('/admin-login.html')" style="background:#4f6ef7;border:none;border-radius:8px;padding:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Stay logged in</button>
+      <button onclick="CmAuth.logout('/admin-login')" style="background:#1e1e45;border:none;border-radius:8px;padding:10px;color:#7c7caa;font-size:12px;font-weight:600;cursor:pointer">Logout</button>
+      <button onclick="CmAuth.dismissCountdown('/admin-login')" style="background:#4f6ef7;border:none;border-radius:8px;padding:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Stay logged in</button>
     </div>
   </div>
 </div>
@@ -174,17 +174,17 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
   window.addEventListener('pageshow', function(evt) {
     if (!evt.persisted) return;
     fetch('/api/auth/me').then(function(r) {
-      if (!r.ok) { window.location.replace('/admin-login.html'); return; }
-      r.json().then(function(u) { if (u.type !== 'admin') window.location.replace('/admin-login.html'); });
-    }).catch(function() { window.location.replace('/admin-login.html'); });
+      if (!r.ok) { window.location.replace('/admin-login'); return; }
+      r.json().then(function(u) { if (u.type !== 'admin') window.location.replace('/admin-login'); });
+    }).catch(function() { window.location.replace('/admin-login'); });
   });
   (async function() {
     if (typeof CmAuth === 'undefined') return;
     const res = await fetch('/api/auth/me').catch(() => null);
-    if (!res || !res.ok) { window.location.replace('/admin-login.html'); return; }
+    if (!res || !res.ok) { window.location.replace('/admin-login'); return; }
     const user = await res.json();
-    if (user.type !== 'admin') { window.location.replace('/admin-login.html'); return; }
-    CmAuth.initIdleTimer('/admin-login.html');
+    if (user.type !== 'admin') { window.location.replace('/admin-login'); return; }
+    CmAuth.initIdleTimer('/admin-login');
     document.body.style.visibility = 'visible';
   })();
 </script>
@@ -202,7 +202,7 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
       <span id="jobsStatus" style="font-size:13px;margin-left:12px">⚫ Stopped</span>
       <span id="jobsStats" style="font-size:12px;margin-left:12px"></span>
     </span>
-    <button onclick="CmAuth.logout('/admin-login.html')" style="margin-left:20px;padding:7px 16px;background:rgba(252,92,92,0.15);border:1px solid rgba(252,92,92,0.3);border-radius:6px;color:#fc5c5c;font-size:13px;font-weight:600;cursor:pointer;transition:background 150ms" onmouseover="this.style.background='rgba(252,92,92,0.25)'" onmouseout="this.style.background='rgba(252,92,92,0.15)'">Logout</button>
+    <button onclick="CmAuth.logout('/admin-login')" style="margin-left:20px;padding:7px 16px;background:rgba(252,92,92,0.15);border:1px solid rgba(252,92,92,0.3);border-radius:6px;color:#fc5c5c;font-size:13px;font-weight:600;cursor:pointer;transition:background 150ms" onmouseover="this.style.background='rgba(252,92,92,0.25)'" onmouseout="this.style.background='rgba(252,92,92,0.15)'">Logout</button>
   </div>
 </header>
 
@@ -231,7 +231,7 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     </div>
     <div class="sidebar-section">Quick Links</div>
     <div class="sidebar-links">
-      <a href="/register.html" target="_blank" class="sidebar-link">+ Register Dealer</a>
+      <a href="/register" target="_blank" class="sidebar-link">+ Register Dealer</a>
       <a href="/register-candidate" target="_blank" class="sidebar-link">+ Register Candidate</a>
     </div>
   </div>

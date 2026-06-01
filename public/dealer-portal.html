@@ -255,7 +255,7 @@
           <div class="lead-title">${esc(lead.post_title)}</div>
           <div class="lead-meta">${source} · ${ago}${lead.lead_category ? ' · ' + esc(lead.lead_category) : ''}</div>
           ${lead.suggested_reply ? `<div class="lead-reply">"${esc(lead.suggested_reply.slice(0,120))}${lead.suggested_reply.length>120?'…':''}"</div>` : ''}
-          <a class="lead-link" href="${esc(lead.post_url)}" target="_blank" rel="noopener">View Post →</a>
+          <a class="lead-link" href="${safeUrl(lead.post_url)}" target="_blank" rel="noopener">View Post →</a>
         </div>`);
     });
     document.getElementById('load-more-btn').style.display = currentPage < totalPages ? 'block' : 'none';
@@ -329,6 +329,7 @@
   function esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+  function safeUrl(u) { return /^https?:\/\//i.test(u||'') ? esc(u) : '#'; }
 
   init();
 </script>

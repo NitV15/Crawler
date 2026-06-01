@@ -242,7 +242,7 @@
         <div class="lead-row">
           <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px">
             <div class="lead-title">${esc(job.job_title)}</div>
-            <a class="lead-link" href="${esc(job.job_url)}" target="_blank" rel="noopener" style="margin-left:12px;white-space:nowrap">Apply →</a>
+            <a class="lead-link" href="${safeUrl(job.job_url)}" target="_blank" rel="noopener" style="margin-left:12px;white-space:nowrap">Apply →</a>
           </div>
           <div class="lead-meta">${esc(job.company)} · ${esc(job.location)}</div>
           <div class="lead-reply">${esc((job.snippet||'').slice(0,150))}${(job.snippet||'').length>150?'…':''}</div>
@@ -320,6 +320,7 @@
   function esc(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+  function safeUrl(u) { return /^https?:\/\//i.test(u||'') ? esc(u) : '#'; }
 
   init();
 </script>

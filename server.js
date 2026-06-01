@@ -29,6 +29,8 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const registrationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false });
 const paymentLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+const otpRequestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+const otpVerifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
 
 const otpStore = new Map(); // email -> {otp, type, id, expiresAt}
 const otpRateLimit = new Map(); // email -> {count, windowStart}
@@ -56,9 +58,14 @@ if (!process.env.SESSION_SECRET) {
   console.error('[fatal] SESSION_SECRET not set — refusing to start');
   process.exit(1);
 }
+if (!process.env.ADMIN_EMAIL) {
+  console.error('[fatal] ADMIN_EMAIL not set — admin login would silently fail');
+  process.exit(1);
+}
 
 function createApp() {
   const app = express();
+  app.set('trust proxy', 1); // Required for correct req.ip behind Render's reverse proxy
   app.use(helmet({ contentSecurityPolicy: false })); // CSP disabled to avoid breaking inline scripts
   app.use(helmet.frameguard({ action: 'deny' }));
   app.use(express.json());
@@ -75,7 +82,7 @@ function createApp() {
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
 
-  app.post('/api/auth/request-otp', async (req, res) => {
+  app.post('/api/auth/request-otp', otpRequestLimiter, async (req, res) => {
     const { email, type } = req.body;
     if (!email || !['dealer', 'candidate', 'admin'].includes(type)) {
       return res.status(400).json({ error: 'email and type required' });
@@ -111,7 +118,7 @@ function createApp() {
     }
   });
 
-  app.post('/api/auth/verify-otp', (req, res) => {
+  app.post('/api/auth/verify-otp', otpVerifyLimiter, (req, res) => {
     const { email, otp, type } = req.body;
     if (!email || !otp || !type) return res.status(400).json({ error: 'email, otp, type required' });
     const attempts = otpVerifyAttempts.get(email) || { count: 0 };

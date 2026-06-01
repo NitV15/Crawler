@@ -90,15 +90,15 @@ function createApp() {
         const candidate = candidates.find(c => c.emails && c.emails.split(',').map(e => e.trim()).includes(email) && c.active === '1');
         if (candidate) userId = parseInt(candidate.id);
       }
-      if (userId !== null) {
-        const otp = String(crypto.randomInt(100000, 1000000));
-        otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
-        // Send email in background — don't await so the response is immediate
-        sendOtpEmail(email, otp).catch(err =>
-          console.error('[auth] OTP email failed:', err.message)
-        );
+      if (userId === null) {
+        return res.status(404).json({ error: 'Email not found' });
       }
-      res.json({ success: true }); // don't reveal if email exists
+      const otp = String(crypto.randomInt(100000, 1000000));
+      otpStore.set(email, { otp, type, id: userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+      sendOtpEmail(email, otp).catch(err =>
+        console.error('[auth] OTP email failed:', err.message)
+      );
+      res.json({ success: true });
     } catch (err) {
       console.error('[auth] request-otp error:', err.message);
       res.status(500).json({ error: 'Failed to send OTP' });

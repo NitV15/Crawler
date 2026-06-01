@@ -3,13 +3,13 @@ const { getLogs, subscribe } = require('./logger'); // must be first to capture 
 const express = require('express');
 const path = require('path');
 const {
-  initSheets, addDealer, getDealers, getLeads, toggleDealer, updateDealer,
+  initSheets, addDealer, getDealers, getLeads, toggleDealer, updateDealer, deleteDealer,
   getUnmatchedLeads, getAllLeads, assignLead, getDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts, getFetchedPost, getLead, cleanupOldData,
   getFetchedJobs, getFetchedJob,
-  addCandidate, getCandidates, getCandidate, toggleCandidate, updateCandidate,
+  addCandidate, getCandidates, getCandidate, toggleCandidate, updateCandidate, deleteCandidate,
   activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
   saveJobMatch, getJobMatches,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
@@ -266,6 +266,15 @@ function createApp() {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });
+    }
+  });
+
+  app.delete('/api/dealers/:id', requireAuth('admin'), async (req, res) => {
+    try {
+      await deleteDealer(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete dealer' });
     }
   });
 
@@ -617,6 +626,15 @@ function createApp() {
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update candidate' });
+    }
+  });
+
+  app.delete('/api/candidates/:id', requireAuth('admin'), async (req, res) => {
+    try {
+      await deleteCandidate(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete candidate' });
     }
   });
 

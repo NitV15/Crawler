@@ -103,6 +103,7 @@ button.action:active { transform: scale(0.96); }
 .btn-reject { background: var(--red-bg); color: var(--red); border: 1px solid rgba(252,92,92,0.2); }
 .btn-toggle-on { background: var(--red-bg); color: var(--red); border: 1px solid rgba(252,92,92,0.2); }
 .btn-toggle-off { background: var(--green-bg); color: var(--green); border: 1px solid rgba(52,211,153,0.2); }
+.btn-delete { background: var(--red-bg); color: var(--red); border: 1px solid rgba(252,92,92,0.3); }
 .btn-send { background: rgba(102,126,234,0.15); color: var(--accent-2); border: 1px solid rgba(167,139,250,0.2); }
 select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--text); }
 .ms-wrap { position: relative; min-width: 200px; }
@@ -344,6 +345,7 @@ function renderDealers() {
           ? `<button class="action btn-sub-stop" onclick="dealerResetSub(${d.id})">Stop Sub</button>`
           : `<button class="action btn-sub-start" onclick="dealerActivateSub(${d.id})">Activate Sub</button>`
         }
+        <button class="action btn-delete" onclick="confirmDeleteDealer(${d.id},'${esc(d.name)}')">Delete</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -810,6 +812,7 @@ function renderCandidates() {
           ? `<button class="action btn-sub-stop" onclick="candidateResetSub(${c.id})">Stop Sub</button>`
           : `<button class="action btn-sub-start" onclick="candidateActivateSub(${c.id})">Activate Sub</button>`}
         <button class="action ${c.active?'btn-toggle-on':'btn-toggle-off'}" onclick="toggleCandidate(${c.id},${c.active?0:1})">${c.active?'Disable':'Enable'}</button>
+        <button class="action btn-delete" onclick="confirmDeleteCandidate(${c.id},'${esc(c.name)}')">Delete</button>
       </td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -819,6 +822,20 @@ function renderCandidates() {
 async function toggleCandidate(id, active) {
   await fetch(`/api/candidates/${id}/toggle`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ active }) });
   loadCandidates();
+}
+
+async function confirmDeleteDealer(id, name) {
+  if (!confirm(`Delete dealer "${name}"?\n\nThis permanently removes them from the sheet and cannot be undone.`)) return;
+  const res = await fetch(`/api/dealers/${id}`, { method: 'DELETE' });
+  if (res.ok) { loadDealers(); }
+  else { alert('Failed to delete dealer. Please try again.'); }
+}
+
+async function confirmDeleteCandidate(id, name) {
+  if (!confirm(`Delete candidate "${name}"?\n\nThis permanently removes them from the sheet and cannot be undone.`)) return;
+  const res = await fetch(`/api/candidates/${id}`, { method: 'DELETE' });
+  if (res.ok) { loadCandidates(); }
+  else { alert('Failed to delete candidate. Please try again.'); }
 }
 
 async function candidateActivateSub(id) {

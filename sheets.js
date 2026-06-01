@@ -50,6 +50,20 @@ async function updateRow(name, id, updates) {
   });
 }
 
+async function deleteRow(name, id) {
+  const rows = await readSheet(name);
+  const rowIdx = rows.findIndex(r => String(r.id) === String(id));
+  if (rowIdx === -1) throw new Error(`[sheets] deleteRow: id ${id} not found in ${name}`);
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties' });
+  const sheetId = meta.data.sheets.find(s => s.properties.title === name)?.properties.sheetId;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: rowIdx + 1, endIndex: rowIdx + 2 } } }],
+    },
+  });
+}
+
 async function initSheets() {
   let authConfig;
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
@@ -174,6 +188,10 @@ async function updateDealer(id, { name, emails, industry_category, services, tar
 
 async function toggleDealer(id, active) {
   return updateRow('dealers', id, { active: active ? '1' : '0' });
+}
+
+async function deleteDealer(id) {
+  return deleteRow('dealers', id);
 }
 
 async function incrementDealerLeadCount(dealerId) {
@@ -372,6 +390,10 @@ async function toggleCandidate(id, active) {
   return updateRow('candidates', id, { active: active ? '1' : '0' });
 }
 
+async function deleteCandidate(id) {
+  return deleteRow('candidates', id);
+}
+
 async function incrementCandidateLeadCount(candidateId) {
   const candidate = await getCandidate(candidateId);
   if (!candidate) return;
@@ -521,13 +543,13 @@ async function getCandidateJobMatches(candidateId, page = 1) {
 module.exports = {
   initSheets,
   readSheet,
-  getDealers, getActiveDealers, getDealer, addDealer, updateDealer, toggleDealer,
+  getDealers, getActiveDealers, getDealer, addDealer, updateDealer, toggleDealer, deleteDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead,
   saveFetchedPost, getFetchedPosts, getFetchedPost, isSeenPost, markPostSeen,
   saveFetchedJob, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs: () => seenFetchedJobs.clear(),
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
-  addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate,
+  addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate, deleteCandidate,
   incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,
   saveJobMatch, getJobMatches, isSeenJob, markJobSeen,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,

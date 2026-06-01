@@ -13,6 +13,7 @@ jest.mock('../sheets', () => ({
   addDealer: jest.fn().mockResolvedValue(1),
   updateDealer: jest.fn().mockResolvedValue(),
   toggleDealer: jest.fn().mockResolvedValue(),
+  deleteDealer: jest.fn().mockResolvedValue(),
   incrementDealerLeadCount: jest.fn().mockResolvedValue(),
   activateDealerSubscription: jest.fn().mockResolvedValue(),
   resetDealerSubscription: jest.fn().mockResolvedValue(),
@@ -38,6 +39,7 @@ jest.mock('../sheets', () => ({
   getCandidate: jest.fn().mockResolvedValue(null),
   updateCandidate: jest.fn().mockResolvedValue(),
   toggleCandidate: jest.fn().mockResolvedValue(),
+  deleteCandidate: jest.fn().mockResolvedValue(),
   incrementCandidateLeadCount: jest.fn().mockResolvedValue(),
   activateCandidateSubscription: jest.fn().mockResolvedValue(),
   resetCandidateSubscription: jest.fn().mockResolvedValue(),
@@ -133,6 +135,18 @@ test('PUT /api/dealers/:id ignores email from body and keeps existing email', as
     .send({ ...dealerData, emails: 'hacker@evil.com' });
   expect(res.status).toBe(200);
   expect(sheetsModule.updateDealer).toHaveBeenCalledWith(1, expect.objectContaining({ emails: 'original@b.com' }));
+});
+
+test('DELETE /api/dealers/:id deletes dealer (admin only)', async () => {
+  const res = await request(app).delete('/api/dealers/1').set('Cookie', adminCookie);
+  expect(res.status).toBe(200);
+  expect(sheetsModule.deleteDealer).toHaveBeenCalledWith(1);
+});
+
+test('DELETE /api/dealers/:id returns 403 for non-admin', async () => {
+  const dealerToken = jwt.sign({ type: 'dealer', id: 1 }, 'test-secret');
+  const res = await request(app).delete('/api/dealers/1').set('Cookie', `cm_auth=${dealerToken}`);
+  expect(res.status).toBe(403);
 });
 
 test('GET /api/dealers returns dealer list', async () => {
@@ -249,6 +263,18 @@ test('PUT /api/candidates/:id ignores email from body and keeps existing email',
     .send({ name: 'John Updated', emails: 'hacker@evil.com', role: 'Developer', skills: 'JS', city: 'Delhi' });
   expect(res.status).toBe(200);
   expect(sheetsModule.updateCandidate).toHaveBeenCalledWith(1, expect.objectContaining({ emails: 'original@dev.com' }));
+});
+
+test('DELETE /api/candidates/:id deletes candidate (admin only)', async () => {
+  const res = await request(app).delete('/api/candidates/1').set('Cookie', adminCookie);
+  expect(res.status).toBe(200);
+  expect(sheetsModule.deleteCandidate).toHaveBeenCalledWith(1);
+});
+
+test('DELETE /api/candidates/:id returns 403 for non-admin', async () => {
+  const candidateToken = jwt.sign({ type: 'candidate', id: 1 }, 'test-secret');
+  const res = await request(app).delete('/api/candidates/1').set('Cookie', `cm_auth=${candidateToken}`);
+  expect(res.status).toBe(403);
 });
 
 test('GET /api/candidates returns candidate list', async () => {

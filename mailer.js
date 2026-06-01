@@ -39,7 +39,7 @@ Suggested reply:
 "${suggestedReply}"
 
 ---
-Crawler — Lead Discovery System`;
+Connect Market`;
 
   if (includeSubscribeFooter) {
     text += `
@@ -73,7 +73,7 @@ async function sendSubscriptionConfirmationEmail(dealer) {
     from: FROM,
     to: emails.join(', '),
     subject: 'Subscription Activated — Unlimited Leads for 30 Days',
-    text: `Hi ${dealer.name},\n\nYour subscription has been activated! You now have unlimited leads for the next 30 days.\n\n---\nCrawler — Lead Discovery System`,
+    text: `Hi ${dealer.name},\n\nYour subscription has been activated! You now have unlimited leads for the next 30 days.\n\n---\nConnect Market`,
   });
 }
 
@@ -84,7 +84,7 @@ async function sendPaymentRejectedEmail(dealer) {
     from: FROM,
     to: emails.join(', '),
     subject: 'Payment Not Verified — Please Resubmit',
-    text: `Hi ${dealer.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nCrawler — Lead Discovery System`,
+    text: `Hi ${dealer.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nConnect Market`,
   });
 }
 
@@ -98,7 +98,7 @@ Renew now to keep receiving unlimited leads without interruption.
 Renew here: ${paymentLink}
 
 ---
-Crawler — Lead Discovery System`;
+Connect Market`;
 }
 
 function buildExpiredText(dealer, paymentLink = '') {
@@ -111,7 +111,7 @@ Renew to continue receiving unlimited leads.
 Renew here: ${paymentLink}
 
 ---
-Crawler — Lead Discovery System`;
+Connect Market`;
 }
 
 async function sendSubscriptionExpiryWarningEmail(dealer, paymentLink) {

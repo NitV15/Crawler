@@ -45,7 +45,7 @@ test('strips markdown code fences before parsing', async () => {
   expect(result[0].is_relevant).toBe(true);
 });
 
-test('retries once on parse failure then returns empty array', async () => {
+test('retries on parse failure then returns empty array', async () => {
   jest.useFakeTimers();
   GoogleGenAI.mockImplementation(() => ({
     models: { generateContent: jest.fn().mockResolvedValue({ text: 'not json' }) },
@@ -56,5 +56,6 @@ test('retries once on parse failure then returns empty array', async () => {
   jest.useRealTimers();
   expect(result).toEqual([]);
   const genAI = GoogleGenAI.mock.results[0].value;
-  expect(genAI.models.generateContent).toHaveBeenCalledTimes(2);
+  // 3 total attempts (initial + 2 retries) for the one chunk
+  expect(genAI.models.generateContent).toHaveBeenCalledTimes(3);
 });

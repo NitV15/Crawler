@@ -3,8 +3,8 @@ const { GoogleGenAI } = require('@google/genai');
 
 const CHUNK_SIZE = 15;
 const TIMEOUT_MS = 30000;
-// Free tier: 5 RPM. Sequential chunks with a 15s gap = 4 RPM, safely under the limit.
-const INTER_CHUNK_DELAY_MS = 15000;
+// gemini-1.5-flash free tier: 15 RPM. 5s gap between sequential chunks = 12 RPM, safely under the limit.
+const INTER_CHUNK_DELAY_MS = 5000;
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: TIMEOUT_MS } });
@@ -49,7 +49,7 @@ Return ONLY a valid JSON array:
 PAIRS:
 ${JSON.stringify(pairList)}`;
 
-  const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+  const result = await ai.models.generateContent({ model: 'gemini-1.5-flash', contents: prompt });
   const text = result.text.trim().replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim();
   return JSON.parse(text);
 }

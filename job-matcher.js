@@ -10,6 +10,24 @@ function getClient() {
   return new Groq({ apiKey: process.env.GROQ_API_KEY });
 }
 
+// Finds the first complete JSON array in text by counting brackets,
+// correctly skipping brackets inside string values.
+function parseJsonArray(text) {
+  const start = text.indexOf('[');
+  if (start === -1) throw new Error(`No JSON array found: ${text.slice(0, 150)}`);
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (esc) { esc = false; continue; }
+    if (c === '\\' && inStr) { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') { if (--depth === 0) return JSON.parse(text.slice(start, i + 1)); }
+  }
+  throw new Error(`Unterminated JSON array: ${text.slice(0, 150)}`);
+}
+
 async function callGroqChunk(client, chunk) {
   const pairList = chunk.map(p => ({
     index: p.originalIndex,
@@ -40,10 +58,7 @@ ${JSON.stringify(pairList)}`;
   });
 
   const raw = completion.choices[0].message.content;
-  // Extract the JSON array even if the model appends explanatory text after it
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error(`No JSON array in response: ${raw.slice(0, 200)}`);
-  return JSON.parse(match[0]);
+  return parseJsonArray(raw);
 }
 
 async function callWithRetry(client, chunk, attempt = 0) {

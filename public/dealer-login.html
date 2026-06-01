@@ -76,7 +76,7 @@
   <button class="btn" id="verify-btn" onclick="verifyOtp()">Verify Code</button>
   <div class="timer">Code expires in <span id="otp-timer">10:00</span></div>
   <div style="text-align:center;margin-top:16px">
-    <a class="link" onclick="resendOtp()">Didn't get a code? Resend →</a>
+    <a class="link" id="resend-link" onclick="resendOtp()">Didn't get a code? Resend →</a>
   </div>
   <div style="text-align:center;margin-top:8px">
     <a class="link" onclick="backToEmail()">← Use a different email</a>
@@ -146,12 +146,30 @@
     } catch { errEl.style.display = 'block'; btn.disabled = false; btn.textContent = 'Verify Code'; }
   }
 
+  let resendCooldown;
   async function resendOtp() {
+    const link = document.getElementById('resend-link');
+    if (link.dataset.cooling) return;
+    link.dataset.cooling = '1';
     await fetch('/api/auth/request-otp', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ email: currentEmail, type: 'dealer' }),
     });
     startOtpTimer();
+    let secs = 60;
+    link.style.pointerEvents = 'none'; link.style.opacity = '0.4';
+    link.textContent = `Resend in ${secs}s`;
+    resendCooldown = setInterval(() => {
+      secs--;
+      if (secs <= 0) {
+        clearInterval(resendCooldown);
+        delete link.dataset.cooling;
+        link.style.pointerEvents = ''; link.style.opacity = '';
+        link.textContent = 'Didn\'t get a code? Resend →';
+      } else {
+        link.textContent = `Resend in ${secs}s`;
+      }
+    }, 1000);
   }
 
   function backToEmail() {

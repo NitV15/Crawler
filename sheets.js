@@ -306,6 +306,25 @@ async function saveFetchedJob({ jobId, jobTitle, company, location, jobUrl, snip
   });
 }
 
+async function batchSaveFetchedJobs(jobs) {
+  const newJobs = jobs.filter(j => !seenFetchedJobs.has(j.jobId));
+  if (!newJobs.length) return;
+  newJobs.forEach(j => seenFetchedJobs.add(j.jobId));
+  const headers = COLS['fetched_jobs'];
+  const existing = await readSheet('fetched_jobs');
+  const now = new Date().toISOString();
+  const rows = newJobs.map((j, i) => {
+    const obj = { id: String(existing.length + i + 1), job_id: j.jobId, job_title: j.jobTitle || '',
+      company: j.company || '', location: j.location || '', job_url: j.jobUrl || '',
+      snippet: (j.snippet || '').slice(0, 500), fetched_at: now };
+    return headers.map(h => String(obj[h] ?? ''));
+  });
+  await sheets.spreadsheets.values.append({
+    spreadsheetId, range: 'fetched_jobs', valueInputOption: 'RAW',
+    requestBody: { values: rows },
+  });
+}
+
 async function getFetchedJobs(limit = 200) {
   const rows = await readSheet('fetched_jobs');
   return rows.sort((a, b) => parseInt(b.id) - parseInt(a.id)).slice(0, limit);
@@ -547,7 +566,7 @@ module.exports = {
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead,
   saveFetchedPost, getFetchedPosts, getFetchedPost, isSeenPost, markPostSeen,
-  saveFetchedJob, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs: () => seenFetchedJobs.clear(),
+  saveFetchedJob, batchSaveFetchedJobs, getFetchedJobs, getFetchedJob, _clearSeenFetchedJobs: () => seenFetchedJobs.clear(),
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate, deleteCandidate,
   incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,

@@ -3,8 +3,8 @@ const { GoogleGenAI } = require('@google/genai');
 
 const CHUNK_SIZE = 15;
 const TIMEOUT_MS = 30000;
-// Free tier: 5 RPM. Sequential chunks with a 13s gap keeps us just under the limit.
-const INTER_CHUNK_DELAY_MS = 13000;
+// Free tier: 5 RPM. Sequential chunks with a 15s gap = 4 RPM, safely under the limit.
+const INTER_CHUNK_DELAY_MS = 15000;
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, httpOptions: { timeout: TIMEOUT_MS } });

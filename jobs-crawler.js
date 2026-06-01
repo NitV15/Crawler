@@ -154,7 +154,7 @@ async function startJobsCrawler() {
   while (jobsCrawlerState.running) {
     try {
       const cycleTimeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Cycle timeout — exceeded 90s')), 90000)
+        setTimeout(() => reject(new Error('Cycle timeout — exceeded 10min')), 10 * 60 * 1000)
       );
       await Promise.race([runJobsCycle(), cycleTimeout]);
     } catch (err) {

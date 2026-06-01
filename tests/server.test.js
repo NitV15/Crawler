@@ -117,6 +117,24 @@ test('POST /api/register returns 400 when required fields missing', async () => 
   expect(res.status).toBe(400);
 });
 
+test('POST /api/register returns 400 when email already registered', async () => {
+  sheetsModule.getDealers.mockResolvedValue([{ id: '1', emails: 'a@b.com', active: '1' }]);
+  const res = await request(app).post('/api/register').send(dealerData);
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('Email already registered');
+  expect(sheetsModule.addDealer).not.toHaveBeenCalled();
+});
+
+test('PUT /api/dealers/:id ignores email from body and keeps existing email', async () => {
+  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Old Name', emails: 'original@b.com' });
+  const dealerToken = jwt.sign({ type: 'dealer', id: 1 }, 'test-secret');
+  const res = await request(app).put('/api/dealers/1')
+    .set('Cookie', `cm_auth=${dealerToken}`)
+    .send({ ...dealerData, emails: 'hacker@evil.com' });
+  expect(res.status).toBe(200);
+  expect(sheetsModule.updateDealer).toHaveBeenCalledWith(1, expect.objectContaining({ emails: 'original@b.com' }));
+});
+
 test('GET /api/dealers returns dealer list', async () => {
   sheetsModule.getDealers.mockResolvedValue([
     { id: '1', name: 'Test Co', city: 'Faridabad', active: '1' },
@@ -210,6 +228,27 @@ test('POST /api/candidates/register creates a candidate', async () => {
   expect(sheetsModule.addCandidate).toHaveBeenCalledWith(expect.objectContaining({
     name: 'John Dev', city: 'Delhi',
   }));
+});
+
+test('POST /api/candidates/register returns 400 when email already registered', async () => {
+  sheetsModule.getCandidates.mockResolvedValue([{ id: '1', emails: 'john@dev.com', active: '1' }]);
+  const res = await request(app).post('/api/candidates/register').send({
+    name: 'Duplicate', emails: 'john@dev.com', role: 'Developer',
+    skills: 'JavaScript', city: 'Delhi',
+  });
+  expect(res.status).toBe(400);
+  expect(res.body.error).toBe('Email already registered');
+  expect(sheetsModule.addCandidate).not.toHaveBeenCalled();
+});
+
+test('PUT /api/candidates/:id ignores email from body and keeps existing email', async () => {
+  sheetsModule.getCandidate.mockResolvedValue({ id: '1', name: 'John Dev', emails: 'original@dev.com' });
+  const candidateToken = jwt.sign({ type: 'candidate', id: 1 }, 'test-secret');
+  const res = await request(app).put('/api/candidates/1')
+    .set('Cookie', `cm_auth=${candidateToken}`)
+    .send({ name: 'John Updated', emails: 'hacker@evil.com', role: 'Developer', skills: 'JS', city: 'Delhi' });
+  expect(res.status).toBe(200);
+  expect(sheetsModule.updateCandidate).toHaveBeenCalledWith(1, expect.objectContaining({ emails: 'original@dev.com' }));
 });
 
 test('GET /api/candidates returns candidate list', async () => {

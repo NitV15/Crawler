@@ -230,6 +230,12 @@ function createApp() {
       return res.status(400).json({ error: 'Required: name, emails, industry_category, services, keywords, state, city' });
     }
     try {
+      const allDealers = await getDealers();
+      const emailList = emails.split(',').map(e => e.trim().toLowerCase());
+      const conflict = allDealers.find(d =>
+        d.emails && d.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
+      );
+      if (conflict) return res.status(400).json({ error: 'Email already registered' });
       const dealerId = await addDealer({ name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true, dealer_id: dealerId });
     } catch (err) {
@@ -264,19 +270,12 @@ function createApp() {
   });
 
   app.put('/api/dealers/:id', requireAuth('dealer', 'admin'), async (req, res) => {
-    const { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
-    if (!name || !emails || !industry_category) return res.status(400).json({ error: 'name, emails, industry_category required' });
+    const { name, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits } = req.body;
+    if (!name || !industry_category) return res.status(400).json({ error: 'name, industry_category required' });
     try {
-      if (emails) {
-        const allDealers = await getDealers();
-        const emailList = emails.split(',').map(e => e.trim().toLowerCase());
-        const conflict = allDealers.find(d =>
-          String(d.id) !== String(req.params.id) &&
-          d.emails && d.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
-        );
-        if (conflict) return res.status(400).json({ error: 'Email already in use by another dealer' });
-      }
-      await updateDealer(parseInt(req.params.id), { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
+      const existing = await getDealer(parseInt(req.params.id));
+      if (!existing) return res.status(404).json({ error: 'Dealer not found' });
+      await updateDealer(parseInt(req.params.id), { name, emails: existing.emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update dealer' });
@@ -571,6 +570,12 @@ function createApp() {
       return res.status(400).json({ error: 'Required: name, emails, role, skills, city' });
     }
     try {
+      const allCandidates = await getCandidates();
+      const emailList = emails.split(',').map(e => e.trim().toLowerCase());
+      const conflict = allCandidates.find(c =>
+        c.emails && c.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
+      );
+      if (conflict) return res.status(400).json({ error: 'Email already registered' });
       const candidateId = await addCandidate({ name, emails, role, skills, experience_level, city, state, preferred_locations });
       res.json({ success: true, candidate_id: candidateId });
     } catch (err) {
@@ -593,19 +598,12 @@ function createApp() {
   });
 
   app.put('/api/candidates/:id', requireAuth('candidate', 'admin'), async (req, res) => {
-    const { name, emails, role, skills, experience_level, city, state, preferred_locations } = req.body;
-    if (!name || !emails || !role) return res.status(400).json({ error: 'name, emails, role required' });
+    const { name, role, skills, experience_level, city, state, preferred_locations } = req.body;
+    if (!name || !role) return res.status(400).json({ error: 'name, role required' });
     try {
-      if (emails) {
-        const allCandidates = await getCandidates();
-        const emailList = emails.split(',').map(e => e.trim().toLowerCase());
-        const conflict = allCandidates.find(c =>
-          String(c.id) !== String(req.params.id) &&
-          c.emails && c.emails.split(',').map(e => e.trim().toLowerCase()).some(e => emailList.includes(e))
-        );
-        if (conflict) return res.status(400).json({ error: 'Email already in use by another candidate' });
-      }
-      await updateCandidate(parseInt(req.params.id), { name, emails, role, skills, experience_level, city, state, preferred_locations });
+      const existing = await getCandidate(parseInt(req.params.id));
+      if (!existing) return res.status(404).json({ error: 'Candidate not found' });
+      await updateCandidate(parseInt(req.params.id), { name, emails: existing.emails, role, skills, experience_level, city, state, preferred_locations });
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to update candidate' });

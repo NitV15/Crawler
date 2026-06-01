@@ -11,7 +11,7 @@
     "postinstall": "pip install -r requirements.txt || true",
     "start": "node server.js",
     "crawl": "node -e \"require('./crawler').runCrawl()\"",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand --forceExit"
   },
   "dependencies": {
     "@google/genai": "^2.3.0",

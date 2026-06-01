@@ -153,7 +153,7 @@ Tip: ${suggestedTip || 'Good luck with your application!'}
 Apply here: ${job.job_url}
 
 ---
-Job Alerts — Powered by Basiq360`;
+Job Alerts — Powered by Connect Market`;
 
   if (includeSubscribeFooter) {
     text += `
@@ -187,7 +187,7 @@ async function sendCandidateSubscriptionConfirmationEmail(candidate) {
     from: FROM,
     to: emails.join(', '),
     subject: 'Subscription Activated — Unlimited Job Alerts for 30 Days',
-    text: `Hi ${candidate.name},\n\nYour subscription has been activated! You now have unlimited job alerts for the next 30 days.\n\n---\nJob Alerts — Powered by Basiq360`,
+    text: `Hi ${candidate.name},\n\nYour subscription has been activated! You now have unlimited job alerts for the next 30 days.\n\n---\nJob Alerts — Powered by Connect Market`,
   });
 }
 
@@ -198,7 +198,7 @@ async function sendCandidatePaymentRejectedEmail(candidate) {
     from: FROM,
     to: emails.join(', '),
     subject: 'Payment Not Verified — Please Resubmit',
-    text: `Hi ${candidate.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nJob Alerts — Powered by Basiq360`,
+    text: `Hi ${candidate.name},\n\nWe could not verify your payment. Please resubmit your UTR number via the payment page.\n\n---\nJob Alerts — Powered by Connect Market`,
   });
 }
 
@@ -212,7 +212,7 @@ Renew now to keep receiving unlimited job alerts without interruption.
 Renew here: ${paymentLink}
 
 ---
-Job Alerts — Powered by Basiq360`;
+Job Alerts — Powered by Connect Market`;
 }
 
 function buildCandidateExpiredText(candidate, paymentLink = '') {
@@ -225,7 +225,7 @@ Renew to continue receiving unlimited job alerts.
 Renew here: ${paymentLink}
 
 ---
-Job Alerts — Powered by Basiq360`;
+Job Alerts — Powered by Connect Market`;
 }
 
 async function sendCandidateExpiryWarningEmail(candidate, paymentLink) {

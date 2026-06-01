@@ -171,12 +171,19 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
   </div>
 </div>
 <script>
+  window.addEventListener('pageshow', function(evt) {
+    if (!evt.persisted) return;
+    fetch('/api/auth/me').then(function(r) {
+      if (!r.ok) { window.location.replace('/admin-login.html'); return; }
+      r.json().then(function(u) { if (u.type !== 'admin') window.location.replace('/admin-login.html'); });
+    }).catch(function() { window.location.replace('/admin-login.html'); });
+  });
   (async function() {
-    if (typeof CmAuth === 'undefined') return; // auth.js not loaded yet, handled by script order
+    if (typeof CmAuth === 'undefined') return;
     const res = await fetch('/api/auth/me').catch(() => null);
-    if (!res || !res.ok) { window.location.href = '/admin-login.html'; return; }
+    if (!res || !res.ok) { window.location.replace('/admin-login.html'); return; }
     const user = await res.json();
-    if (user.type !== 'admin') { window.location.href = '/admin-login.html'; return; }
+    if (user.type !== 'admin') { window.location.replace('/admin-login.html'); return; }
     CmAuth.initIdleTimer('/admin-login.html');
     document.body.style.visibility = 'visible';
   })();

@@ -77,7 +77,7 @@
     .idle-stay{background:var(--accent);border:none;border-radius:8px;padding:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px var(--accent-glow)}
   </style>
 </head>
-<body>
+<body style="visibility:hidden">
 
 <div id="idle-overlay">
   <div class="idle-card">
@@ -176,6 +176,7 @@
     if (!user) return;
     candidateId = user.id;
     document.getElementById('user-name').textContent = user.name;
+    document.body.style.visibility = 'visible';
     CmAuth.initIdleTimer('/candidate-login.html');
     await Promise.all([loadStats(), loadLeads(1)]);
   }

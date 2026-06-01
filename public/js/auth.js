@@ -27,14 +27,24 @@
 
   // ── Auth check redirect ───────────────────────────────────────────────────────
   async function requirePortalAuth(expectedType, loginUrl) {
+    // When browser restores this page from bfcache (back button after logout),
+    // re-verify auth and kick out immediately if the session is gone.
+    window.addEventListener('pageshow', function(evt) {
+      if (evt.persisted) {
+        fetch('/api/auth/me').then(function(r) {
+          if (!r.ok) window.location.replace(loginUrl);
+          else r.json().then(function(u) { if (u.type !== expectedType) window.location.replace(loginUrl); });
+        }).catch(function() { window.location.replace(loginUrl); });
+      }
+    });
     try {
       const res = await fetch('/api/auth/me');
-      if (!res.ok) { window.location.href = loginUrl; return null; }
+      if (!res.ok) { window.location.replace(loginUrl); return null; }
       const user = await res.json();
-      if (user.type !== expectedType) { window.location.href = loginUrl; return null; }
+      if (user.type !== expectedType) { window.location.replace(loginUrl); return null; }
       return user;
     } catch {
-      window.location.href = loginUrl;
+      window.location.replace(loginUrl);
       return null;
     }
   }
@@ -42,7 +52,7 @@
   // ── Logout ────────────────────────────────────────────────────────────────────
   async function logout(loginUrl) {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    window.location.href = loginUrl;
+    window.location.replace(loginUrl);
   }
 
   // ── Inactivity timer ─────────────────────────────────────────────────────────

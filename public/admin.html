@@ -211,7 +211,6 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div class="sidebar-section">Dealers</div>
     <div class="tabs">
       <div class="tab active" onclick="switchTab('dealers')">🏪 Dealers</div>
-      <div class="tab" onclick="switchTab('payments')">💳 Payments</div>
     </div>
     <div class="sidebar-section">Leads</div>
     <div class="tabs">
@@ -225,7 +224,6 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
       <div class="tab" onclick="switchTab('candidates')">👤 Candidates</div>
       <div class="tab" onclick="switchTab('job-matches')">💼 Job Matches</div>
       <div class="tab" onclick="switchTab('fetched-jobs')">🔍 Fetched Jobs</div>
-      <div class="tab" onclick="switchTab('cand-payments')">💳 Cand. Payments</div>
     </div>
     <div class="sidebar-section">System</div>
     <div class="tabs">
@@ -235,8 +233,6 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div class="sidebar-links">
       <a href="/register.html" target="_blank" class="sidebar-link">+ Register Dealer</a>
       <a href="/register-candidate" target="_blank" class="sidebar-link">+ Register Candidate</a>
-      <a href="/pay" target="_blank" class="sidebar-link secondary">↗ Dealer Pay (preview)</a>
-      <a href="/candidate-pay" target="_blank" class="sidebar-link secondary">↗ Candidate Pay (preview)</a>
     </div>
   </div>
   <div class="content">
@@ -244,13 +240,11 @@ select.assign { padding: 4px 6px; font-size: 12px; border: 1px solid var(--borde
     <div id="panel-total" class="panel"></div>
     <div id="panel-matched" class="panel"></div>
     <div id="panel-unmatched" class="panel"></div>
-    <div id="panel-payments" class="panel"></div>
     <div id="panel-fetched" class="panel"></div>
     <div id="panel-logs" class="panel"></div>
     <div id="panel-candidates" class="panel"></div>
     <div id="panel-job-matches" class="panel"></div>
     <div id="panel-fetched-jobs" class="panel"></div>
-    <div id="panel-cand-payments" class="panel"></div>
   </div>
 </div>
 
@@ -260,7 +254,7 @@ let allLeadsRaw = [];
 let matchedRaw = [];
 let unmatchedRaw = [];
 
-const TAB_NAMES = ['dealers','payments','total','matched','unmatched','fetched','candidates','job-matches','fetched-jobs','cand-payments','logs'];
+const TAB_NAMES = ['dealers','total','matched','unmatched','fetched','candidates','job-matches','fetched-jobs','logs'];
 
 function switchTab(name) {
   if (!TAB_NAMES.includes(name)) name = 'dealers';
@@ -274,13 +268,11 @@ function switchTab(name) {
   else if (name === 'total') loadAllLeads();
   else if (name === 'matched') loadMatched();
   else if (name === 'unmatched') loadUnmatched();
-  else if (name === 'payments') loadPayments();
   else if (name === 'fetched') loadFetchedPosts();
   else if (name === 'logs') initLogs();
   else if (name === 'candidates') loadCandidates();
   else if (name === 'job-matches') loadJobMatches();
   else if (name === 'fetched-jobs') loadFetchedJobs();
-  else if (name === 'cand-payments') loadCandidatePayments();
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -510,27 +502,6 @@ function renderUnmatched() {
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 
-async function loadPayments() {
-  const payments = await fetch('/api/payments').then(r => r.json());
-  const panel = document.getElementById('panel-payments');
-  if (!payments.length) { panel.innerHTML = '<p>No payment submissions yet.</p>'; return; }
-  panel.innerHTML = `<table>
-    <thead><tr><th>Dealer</th><th>UTR Number</th><th>Amount</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>
-    <tbody>${payments.map(p => `<tr>
-      <td>${esc(p.dealer_name)}</td>
-      <td><code>${esc(p.utr_number)}</code></td>
-      <td>&#8377;${p.amount}</td>
-      <td><span class="badge badge-${p.status}">${p.status}</span></td>
-      <td>${(p.created_at||'').slice(0,10)}</td>
-      <td>${p.status==='pending' ? `
-        <button class="action btn-verify" onclick="verifyPayment(${p.id})">Verify</button>
-        <button class="action btn-reject" onclick="rejectPayment(${p.id})">Reject</button>
-      ` : '—'}</td>
-    </tr>`).join('')}</tbody>
-  </table>`;
-  animateTableRows(panel);
-}
-
 // ── Fetched Posts ─────────────────────────────────────────────────────────────
 
 async function loadFetchedPosts() {
@@ -618,17 +589,6 @@ async function dealerResetSub(id) {
   if (!confirm('Stop subscription for this dealer? This resets them to free tier.')) return;
   await fetch(`/api/dealers/${id}/reset-subscription`, { method: 'POST' });
   loadDealers();
-}
-
-async function verifyPayment(payId) {
-  await fetch(`/api/payments/${payId}/verify`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-  loadPayments();
-  loadDealers();
-}
-
-async function rejectPayment(payId) {
-  await fetch(`/api/payments/${payId}/reject`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-  loadPayments();
 }
 
 function toggleMs(leadId) {
@@ -995,42 +955,6 @@ async function sendFetchedJob(jobId) {
     btn.textContent = 'Send';
     alert('Network error');
   }
-}
-
-// ── Candidate Payments Tab ─────────────────────────────────────────────────────
-
-async function loadCandidatePayments() {
-  const payments = await fetch('/api/candidate-payments').then(r => r.json());
-  const panel = document.getElementById('panel-cand-payments');
-  if (!payments.length) { panel.innerHTML = '<p>No candidate payment submissions yet.</p>'; return; }
-  panel.innerHTML = `<table>
-    <thead><tr><th>Candidate</th><th>UTR Number</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
-    <tbody>${payments.map(p => `<tr>
-      <td><strong>${esc(p.candidate_name)}</strong><br><small>${esc(p.candidate_emails)}</small></td>
-      <td>${esc(p.utr_number)}</td>
-      <td>₹${p.amount}</td>
-      <td><span class="badge badge-${p.status}">${p.status}</span></td>
-      <td style="white-space:nowrap">${(p.created_at||'').slice(0,10)||'—'}</td>
-      <td>
-        ${p.status==='pending' ? `
-          <button class="action btn-verify" onclick="verifyCandidatePayment(${p.id})">Verify</button>
-          <button class="action btn-reject" onclick="rejectCandidatePayment(${p.id})">Reject</button>
-        ` : esc(p.status)}
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
-  animateTableRows(panel);
-}
-
-async function verifyCandidatePayment(payId) {
-  await fetch(`/api/candidate-payments/${payId}/verify`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-  loadCandidatePayments();
-  loadCandidates();
-}
-
-async function rejectCandidatePayment(payId) {
-  await fetch(`/api/candidate-payments/${payId}/reject`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
-  loadCandidatePayments();
 }
 
 pollStatus();

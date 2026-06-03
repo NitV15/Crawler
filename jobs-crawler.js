@@ -41,6 +41,17 @@ function checkCandidateSubscription(candidate) {
 
 async function runJobsCycle() {
   const candidates = await getActiveCandidates();
+
+  // Auto-purge stale fetched data (5-day retention)
+  try {
+    const { cleanupOldData } = require('./sheets');
+    const purged = await cleanupOldData();
+    if (purged.deleted_fetched_jobs > 0 || purged.deleted_fetched_posts > 0)
+      console.log(`[jobs] Cleanup: removed ${purged.deleted_fetched_jobs} old jobs, ${purged.deleted_fetched_posts} old posts`);
+  } catch (e) {
+    console.warn('[jobs] Cleanup failed (non-fatal):', e.message);
+  }
+
   if (!candidates.length) {
     jobsCrawlerState.currentCandidate = 'Waiting - no candidates';
     return;

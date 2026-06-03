@@ -522,25 +522,31 @@ async function rejectCandidatePayment(id) {
 // ─── Admin Cleanup ────────────────────────────────────────────────────────────
 
 async function cleanupOldData() {
-  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const fiveDaysAgo   = new Date(Date.now() - 5  * 24 * 60 * 60 * 1000).toISOString();
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [fetchedRows, leadRows] = await Promise.all([
+  const [fetchedPostRows, fetchedJobRows, leadRows] = await Promise.all([
     readSheet('fetched_posts'),
+    readSheet('fetched_jobs'),
     readSheet('leads'),
   ]);
 
-  const oldFetched = fetchedRows
+  const oldFetchedPosts = fetchedPostRows
     .map((r, i) => ({ ...r, _sheetRow: i + 2 }))
-    .filter(r => r.fetched_at < sixtyDaysAgo);
+    .filter(r => r.fetched_at < fiveDaysAgo);
+
+  const oldFetchedJobs = fetchedJobRows
+    .map((r, i) => ({ ...r, _sheetRow: i + 2 }))
+    .filter(r => r.fetched_at < fiveDaysAgo);
 
   const oldLeads = leadRows
     .map((r, i) => ({ ...r, _sheetRow: i + 2 }))
     .filter(r => r.status === 'unmatched' && r.emailed_at < ninetyDaysAgo);
 
   const toDelete = [
-    ...oldFetched.map(r => ({ sheet: 'fetched_posts', row: r._sheetRow })),
-    ...oldLeads.map(r => ({ sheet: 'leads', row: r._sheetRow })),
+    ...oldFetchedPosts.map(r => ({ sheet: 'fetched_posts', row: r._sheetRow })),
+    ...oldFetchedJobs.map(r => ({ sheet: 'fetched_jobs',   row: r._sheetRow })),
+    ...oldLeads.map(r =>       ({ sheet: 'leads',          row: r._sheetRow })),
   ].sort((a, b) => b.row - a.row);
 
   if (toDelete.length > 0) {
@@ -558,9 +564,16 @@ async function cleanupOldData() {
         })),
       },
     });
+
+    // Remove purged job IDs from in-memory set so they can be re-fetched if re-posted
+    oldFetchedJobs.forEach(r => r.job_id && seenFetchedJobs.delete(r.job_id));
   }
 
-  return { deleted_fetched: oldFetched.length, deleted_unmatched: oldLeads.length };
+  return {
+    deleted_fetched_posts:   oldFetchedPosts.length,
+    deleted_fetched_jobs:    oldFetchedJobs.length,
+    deleted_unmatched_leads: oldLeads.length,
+  };
 }
 
 async function getDealerLeads(dealerId, page = 1) {

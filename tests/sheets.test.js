@@ -413,25 +413,31 @@ describe('saveFetchedJob / getFetchedJobs / getFetchedJob', () => {
 
 // ─── Cleanup ───────────────────────────────────────────────────────────────────
 
-test('cleanupOldData deletes old fetched posts and unmatched leads', async () => {
+test('cleanupOldData deletes old fetched posts, fetched jobs, and unmatched leads', async () => {
   const old = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
   const recent = new Date().toISOString();
   mockSpreadsheetsBatchUpdate.mockResolvedValue({ data: {} });
   mockSpreadsheetsGet.mockResolvedValue({ data: { sheets: [
     { properties: { title: 'fetched_posts', sheetId: 0 } },
-    { properties: { title: 'leads', sheetId: 1 } },
+    { properties: { title: 'fetched_jobs',  sheetId: 2 } },
+    { properties: { title: 'leads',         sheetId: 1 } },
   ]}});
   mockValuesGet
     .mockResolvedValueOnce(mockSheet(FETCHED_HEADERS, [
       ['1','post_old','Old','','http://old.com','india', old],
       ['2','post_new','New','','http://new.com','india', recent],
     ]))
+    .mockResolvedValueOnce(mockSheet(FETCHED_JOB_HEADERS, [
+      ['1','job_old','Old Job','OldCo','Delhi','http://old.com','old snippet', old],
+      ['2','job_new','New Job','NewCo','Mumbai','http://new.com','new snippet', recent],
+    ]))
     .mockResolvedValueOnce(mockSheet(LEAD_HEADERS, [
       ['1','','oldpost','Old','','http://old.com','india','','','','','','unmatched', old],
       ['2','1','newpost','New','','http://new.com','india','','','','','','matched', recent],
     ]));
   const result = await sheets.cleanupOldData();
-  expect(result.deleted_fetched).toBe(1);
-  expect(result.deleted_unmatched).toBe(1);
+  expect(result.deleted_fetched_posts).toBe(1);
+  expect(result.deleted_fetched_jobs).toBe(1);
+  expect(result.deleted_unmatched_leads).toBe(1);
   expect(mockSpreadsheetsBatchUpdate).toHaveBeenCalledTimes(1);
 });

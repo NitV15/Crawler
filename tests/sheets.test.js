@@ -5,6 +5,38 @@ test('db module loads', () => {
   expect(() => require('../db')).not.toThrow();
 });
 
+describe('isSeenJob / markJobSeen per-candidate', () => {
+  beforeEach(() => {
+    const { _resetSeenJobs } = require('../sheets');
+    _resetSeenJobs();
+  });
+
+  test('isSeenJob: false when not seen', () => {
+    const { isSeenJob } = require('../sheets');
+    expect(isSeenJob('job1', 1)).toBe(false);
+  });
+
+  test('isSeenJob: true after markJobSeen for same candidate', () => {
+    const { isSeenJob, markJobSeen } = require('../sheets');
+    markJobSeen('job1', 1);
+    expect(isSeenJob('job1', 1)).toBe(true);
+  });
+
+  test('isSeenJob: false for different candidate even if another saw it', () => {
+    const { isSeenJob, markJobSeen } = require('../sheets');
+    markJobSeen('job1', 1);
+    expect(isSeenJob('job1', 2)).toBe(false);
+  });
+
+  test('same job can be seen by two different candidates', () => {
+    const { isSeenJob, markJobSeen } = require('../sheets');
+    markJobSeen('job1', 1);
+    markJobSeen('job1', 2);
+    expect(isSeenJob('job1', 1)).toBe(true);
+    expect(isSeenJob('job1', 2)).toBe(true);
+  });
+});
+
 const mockValuesGet = jest.fn();
 const mockValuesAppend = jest.fn();
 const mockValuesUpdate = jest.fn();
@@ -298,14 +330,14 @@ test('verifyCandidatePayment updates status and verified_at', async () => {
 // ─── Job Matches ───────────────────────────────────────────────────────────────
 
 test('isSeenJob returns false for unknown job', () => {
-  expect(sheets.isSeenJob('brand_new_job')).toBe(false);
+  expect(sheets.isSeenJob('brand_new_job', 1)).toBe(false);
 });
 
 test('saveJobMatch adds to seenJobs and calls appendRow', async () => {
   mockValuesGet.mockResolvedValue(mockSheet(JOB_HEADERS));
   await sheets.saveJobMatch({ candidateId: 1, indeedJobId: 'job_xyz', jobTitle: 'Dev', company: 'Corp', location: 'Delhi', jobUrl: 'http://indeed.com/job', snippet: 'Great role', suggestedTip: 'Apply', status: 'matched' });
   expect(mockValuesAppend).toHaveBeenCalledTimes(1);
-  expect(sheets.isSeenJob('job_xyz')).toBe(true);
+  expect(sheets.isSeenJob('job_xyz', 1)).toBe(true);
 });
 
 // ─── Candidate Payments ─────────────────────────────────────────────────────────

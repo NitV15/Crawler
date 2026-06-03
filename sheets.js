@@ -105,7 +105,7 @@ async function initSheets() {
   const fetchedRows = await readSheet('fetched_posts');
   fetchedRows.forEach(r => r.post_id && seenPosts.add(r.post_id));
   const jobRows = await readSheet('job_matches');
-  jobRows.forEach(r => r.indeed_job_id && seenJobs.add(r.indeed_job_id));
+  jobRows.forEach(r => r.indeed_job_id && r.candidate_id && seenJobs.add(`${r.candidate_id}:${r.indeed_job_id}`));
 
   // Ensure fetched_jobs tab exists (may be missing from older spreadsheets)
   try {
@@ -133,6 +133,18 @@ async function initSheets() {
     console.warn('[sheets] Could not load fetched_jobs rows:', e.message);
   }
   console.log(`[sheets] Connected. seenPosts=${seenPosts.size}, seenJobs=${seenJobs.size}, seenFetchedJobs=${seenFetchedJobs.size}`);
+
+  // Sync SQLite mirror
+  try {
+    const { initDb, syncJobMatches, syncLeads } = require('./db');
+    initDb();
+    const leadRows = await readSheet('leads');
+    syncJobMatches(jobRows);
+    syncLeads(leadRows.filter(r => r.status === 'matched' || r.status === 'assigned'));
+    console.log('[sheets] SQLite mirror synced');
+  } catch (e) {
+    console.warn('[sheets] SQLite sync failed (non-fatal):', e.message);
+  }
 }
 
 // ─── Dealers ──────────────────────────────────────────────────────────────────
@@ -212,6 +224,12 @@ async function resetDealerSubscription(dealerId) {
 // ─── Leads ────────────────────────────────────────────────────────────────────
 
 async function saveLead({ dealerId, redditPostId, postTitle, postText, postUrl, subreddit, matchReason, suggestedReply, whatToSell, leadCategory, postLocation, status }) {
+  try {
+    const { insertLead } = require('./db');
+    insertLead({ dealerId, redditPostId, postTitle, postText, postUrl, subreddit, matchReason, suggestedReply, whatToSell, leadCategory, postLocation, status });
+  } catch (e) {
+    console.warn('[sheets] SQLite insertLead failed (non-fatal):', e.message);
+  }
   return appendRow('leads', {
     dealer_id: dealerId != null ? String(dealerId) : '',
     reddit_post_id: redditPostId,
@@ -327,7 +345,8 @@ async function batchSaveFetchedJobs(jobs) {
 
 async function getFetchedJobs(limit = 200) {
   const rows = await readSheet('fetched_jobs');
-  return rows.sort((a, b) => parseInt(b.id) - parseInt(a.id)).slice(0, limit);
+  const sorted = rows.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  return limit > 0 ? sorted.slice(0, limit) : sorted;
 }
 
 async function getFetchedJob(id) {
@@ -431,8 +450,15 @@ async function resetCandidateSubscription(candidateId) {
 // ─── Job Matches ──────────────────────────────────────────────────────────────
 
 async function saveJobMatch({ candidateId, indeedJobId, jobTitle, company, location, jobUrl, snippet, suggestedTip, status }) {
-  if (seenJobs.has(indeedJobId)) return;
-  seenJobs.add(indeedJobId);
+  const key = `${candidateId}:${indeedJobId}`;
+  if (seenJobs.has(key)) return;
+  seenJobs.add(key);
+  try {
+    const { insertJobMatch } = require('./db');
+    insertJobMatch({ candidateId, indeedJobId, jobTitle, company, location, jobUrl, snippet, suggestedTip, status });
+  } catch (e) {
+    console.warn('[sheets] SQLite insertJobMatch failed (non-fatal):', e.message);
+  }
   return appendRow('job_matches', {
     candidate_id: candidateId != null ? String(candidateId) : '',
     indeed_job_id: indeedJobId,
@@ -456,8 +482,8 @@ async function getJobMatches(limit = 200) {
     .map(j => ({ ...j, candidate_name: candidateMap[j.candidate_id]?.name || '' }));
 }
 
-function isSeenJob(jobId) { return seenJobs.has(jobId); }
-function markJobSeen(jobId) { seenJobs.add(jobId); }
+function isSeenJob(jobId, candidateId) { return seenJobs.has(`${candidateId}:${jobId}`); }
+function markJobSeen(jobId, candidateId) { seenJobs.add(`${candidateId}:${jobId}`); }
 
 // ─── Candidate Payments ───────────────────────────────────────────────────────
 
@@ -538,25 +564,37 @@ async function cleanupOldData() {
 }
 
 async function getDealerLeads(dealerId, page = 1) {
-  const PAGE_SIZE = 20;
-  const rows = await readSheet('leads');
-  const filtered = rows
-    .filter(r => String(r.dealer_id) === String(dealerId) && (r.status === 'matched' || r.status === 'assigned'))
-    .sort((a, b) => parseInt(b.id) - parseInt(a.id));
-  const total = filtered.length;
-  const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
+  try {
+    const { getLeadsByDealer } = require('./db');
+    return getLeadsByDealer(dealerId, page);
+  } catch (e) {
+    console.warn('[sheets] SQLite getDealerLeads failed, falling back:', e.message);
+    const PAGE_SIZE = 20;
+    const rows = await readSheet('leads');
+    const filtered = rows
+      .filter(r => String(r.dealer_id) === String(dealerId) && (r.status === 'matched' || r.status === 'assigned'))
+      .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+    const total = filtered.length;
+    const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
+  }
 }
 
 async function getCandidateJobMatches(candidateId, page = 1) {
-  const PAGE_SIZE = 20;
-  const rows = await readSheet('job_matches');
-  const filtered = rows
-    .filter(r => String(r.candidate_id) === String(candidateId))
-    .sort((a, b) => parseInt(b.id) - parseInt(a.id));
-  const total = filtered.length;
-  const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
+  try {
+    const { getJobMatchesByCandidate } = require('./db');
+    return getJobMatchesByCandidate(candidateId, page);
+  } catch (e) {
+    console.warn('[sheets] SQLite getCandidateJobMatches failed, falling back:', e.message);
+    const PAGE_SIZE = 20;
+    const rows = await readSheet('job_matches');
+    const filtered = rows
+      .filter(r => String(r.candidate_id) === String(candidateId))
+      .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+    const total = filtered.length;
+    const items = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) || 1 };
+  }
 }
 
 module.exports = {
@@ -570,7 +608,7 @@ module.exports = {
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate, deleteCandidate,
   incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,
-  saveJobMatch, getJobMatches, isSeenJob, markJobSeen,
+  saveJobMatch, getJobMatches, isSeenJob, markJobSeen, _resetSeenJobs: () => seenJobs.clear(),
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
   cleanupOldData,
   getDealerLeads, getCandidateJobMatches,

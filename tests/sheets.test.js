@@ -1,6 +1,10 @@
 process.env.GOOGLE_CREDENTIALS_PATH = '/tmp/fake-creds.json';
 process.env.SPREADSHEET_ID = 'fake-spreadsheet-id';
 
+test('db module loads', () => {
+  expect(() => require('../db')).not.toThrow();
+});
+
 const mockValuesGet = jest.fn();
 const mockValuesAppend = jest.fn();
 const mockValuesUpdate = jest.fn();

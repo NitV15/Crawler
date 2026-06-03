@@ -77,12 +77,13 @@ async function runJobsCycle() {
       jobs = jobs.filter(j => seenIds.has(j.job_id) ? false : seenIds.add(j.job_id));
       for (const job of jobs) {
         if (job.created_utc < threeDaysAgo) continue;
-        if (seenThisCycle.has(job.job_id)) continue;
         if (isSeenJob(job.job_id)) continue;
-        seenThisCycle.add(job.job_id);
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
-        newJobsToSave.push({ jobId: job.job_id, jobTitle: job.title, company: job.company, location: job.location, jobUrl: job.url, snippet: job.snippet });
+        if (!seenThisCycle.has(job.job_id)) {
+          seenThisCycle.add(job.job_id);
+          newJobsToSave.push({ jobId: job.job_id, jobTitle: job.title, company: job.company, location: job.location, jobUrl: job.url, snippet: job.snippet });
+        }
       }
     } catch (err) {
       console.error(`[jobs] ${candidate.name} fetch failed: ${err.message}`);

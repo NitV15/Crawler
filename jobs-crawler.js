@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { getActiveCandidates, getCandidate, saveJobMatch, incrementCandidateLeadCount,
-        resetCandidateSubscription, isSeenJob, markJobSeen, batchSaveFetchedJobs } = require('./sheets');
+        resetCandidateSubscription, isSeenJob, markJobSeen, batchSaveFetchedJobs,
+        getFetchedJobs } = require('./sheets');
 const { fetchIndeedJobs } = require('./indeed-fetcher');
 const { processJobBatch } = require('./job-matcher');
 const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('./mailer');
@@ -57,7 +58,7 @@ async function runJobsCycle() {
     }
   }
 
-  const threeDaysAgo = Date.now() / 1000 - 3 * 86400;
+  const fiveDaysAgo = Date.now() / 1000 - 5 * 86400;
   const seenThisCycle = new Set();
   const buffer = [];
   const newJobsToSave = [];
@@ -76,8 +77,8 @@ async function runJobsCycle() {
       const seenIds = new Set();
       jobs = jobs.filter(j => seenIds.has(j.job_id) ? false : seenIds.add(j.job_id));
       for (const job of jobs) {
-        if (job.created_utc < threeDaysAgo) continue;
-        if (isSeenJob(job.job_id)) continue;
+        if (job.created_utc < fiveDaysAgo) continue;
+        if (isSeenJob(job.job_id, candidate.id)) continue;
         buffer.push({ candidate, job });
         jobsCrawlerState.jobsCollected++;
         if (!seenThisCycle.has(job.job_id)) {
@@ -87,6 +88,32 @@ async function runJobsCycle() {
       }
     } catch (err) {
       console.error(`[jobs] ${candidate.name} fetch failed: ${err.message}`);
+    }
+  }
+
+  // Catch-up: buffer fetched_jobs for candidates who have never received a match
+  const newCandidates = candidates.filter(c => parseInt(c.lead_count) === 0);
+  if (newCandidates.length) {
+    const allFetchedJobs = await getFetchedJobs(0);
+    for (const candidate of newCandidates) {
+      if (!jobsCrawlerState.running) break;
+      for (const fj of allFetchedJobs) {
+        if (isSeenJob(fj.job_id, candidate.id)) continue;
+        buffer.push({
+          candidate,
+          job: {
+            job_id:      fj.job_id,
+            title:       fj.job_title,
+            company:     fj.company,
+            location:    fj.location,
+            url:         fj.job_url,
+            snippet:     fj.snippet,
+            date:        fj.fetched_at,
+            created_utc: Infinity,
+          },
+        });
+        jobsCrawlerState.jobsCollected++;
+      }
     }
   }
 
@@ -135,6 +162,7 @@ async function runJobsCycle() {
       paymentLink: `${BASE_URL}/candidate-pay?candidate_id=${freshCandidate.id}`,
     });
     await incrementCandidateLeadCount(freshCandidate.id);
+    markJobSeen(job.job_id, freshCandidate.id);
     jobsCrawlerState.matchesFound++;
     jobsCrawlerState.emailsSent++;
     console.log(`[jobs] ✓ ${freshCandidate.name} | ${job.title} at ${job.company}`);

@@ -37,6 +37,7 @@ beforeEach(() => {
   sheets.markJobSeen.mockImplementation(() => {});
   sheets.saveFetchedJob.mockResolvedValue();
   sheets.batchSaveFetchedJobs.mockResolvedValue();
+  sheets.getFetchedJobs.mockResolvedValue([]);
   fetchIndeedJobs.mockResolvedValue([fakeJob]);
   processJobBatch.mockResolvedValue([{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }]);
   sendJobAlertEmail.mockResolvedValue();
@@ -106,10 +107,10 @@ test('startJobsCrawler skips already-seen jobs', async () => {
   expect(sendJobAlertEmail).not.toHaveBeenCalled();
 });
 
-test('startJobsCrawler skips job older than 3 days', async () => {
+test('startJobsCrawler skips job older than 5 days', async () => {
   fetchIndeedJobs.mockImplementation(async () => {
     stopJobsCrawler();
-    return [{ ...fakeJob, created_utc: Math.floor(Date.now() / 1000) - 4 * 86400 }];
+    return [{ ...fakeJob, created_utc: Math.floor(Date.now() / 1000) - 6 * 86400 }];
   });
   await startJobsCrawler();
   expect(sendJobAlertEmail).not.toHaveBeenCalled();
@@ -133,6 +134,64 @@ test('startJobsCrawler sends with footer when lead_count=1', async () => {
   });
   await startJobsCrawler();
   expect(sendJobAlertEmail).toHaveBeenCalledWith(expect.objectContaining({ includeSubscribeFooter: true }));
+});
+
+const activeCandidate = {
+  id: 2, name: 'New User', emails: 'new@test.com',
+  role: 'Backend Developer', skills: 'Node.js',
+  experience_level: '3-5 yr', city: 'Delhi',
+  lead_count: 0, subscription_status: 'active',
+  subscription_expires_at: new Date(Date.now() + 86400000).toISOString(),
+};
+
+const fetchedJob = {
+  id: '5', job_id: 'adzuna_fetchedold', job_title: 'Node.js Developer',
+  company: 'OldCo', location: 'Delhi', job_url: 'https://example.com/job/5',
+  snippet: 'Node.js required.', fetched_at: '2026-05-30T10:00:00.000Z',
+};
+
+test('catch-up: new candidate (lead_count=0) gets fetched_jobs buffered', async () => {
+  sheets.getActiveCandidates.mockResolvedValue([activeCandidate]);
+  sheets.getCandidate.mockResolvedValue(activeCandidate);
+  sheets.getFetchedJobs.mockResolvedValue([fetchedJob]);
+  fetchIndeedJobs.mockResolvedValue([]);
+  sheets.isSeenJob.mockReturnValue(false);
+
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return batch.map((_, i) => ({ index: i, is_relevant: true, suggested_tip: 'Good match.' }));
+  });
+
+  await startJobsCrawler();
+  expect(processJobBatch).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      expect.objectContaining({ candidate: activeCandidate }),
+    ])
+  );
+  expect(sendJobAlertEmail).toHaveBeenCalled();
+});
+
+test('catch-up: candidate with lead_count>0 does NOT get catch-up jobs', async () => {
+  const existingCandidate = { ...activeCandidate, lead_count: 3 };
+  sheets.getActiveCandidates.mockResolvedValue([existingCandidate]);
+  sheets.getCandidate.mockResolvedValue(existingCandidate);
+  sheets.getFetchedJobs.mockResolvedValue([fetchedJob]);
+  fetchIndeedJobs.mockImplementation(async () => {
+    stopJobsCrawler();
+    return [];
+  });
+
+  await startJobsCrawler();
+  expect(sendJobAlertEmail).not.toHaveBeenCalled();
+});
+
+test('markJobSeen called with candidateId after successful send', async () => {
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Great.' }];
+  });
+  await startJobsCrawler();
+  expect(sheets.markJobSeen).toHaveBeenCalledWith(fakeJob.job_id, freeCandidate.id);
 });
 
 describe('candidate expiry notifications', () => {

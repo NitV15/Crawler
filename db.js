@@ -188,8 +188,8 @@ function getDealer(id) {
 
 function updateDealer(id, { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits }) {
   getDb().prepare(`
-    UPDATE dealers SET name=?,emails=?,industry=?,industry_category=?,services=?,target_customers=?,keywords=?,state=?,city=?,service_areas=?,custom_subreddits=? WHERE id=?
-  `).run(name,emails,industry_category||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',String(id));
+    UPDATE dealers SET name=?,emails=?,industry=?,description=?,industry_category=?,services=?,target_customers=?,keywords=?,state=?,city=?,service_areas=?,custom_subreddits=? WHERE id=?
+  `).run(name,emails,industry_category||'',services||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',String(id));
 }
 
 function toggleDealer(id, active) {

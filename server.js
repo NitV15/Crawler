@@ -3,8 +3,9 @@ const { getLogs, subscribe } = require('./logger'); // must be first to capture 
 const express = require('express');
 const path = require('path');
 const {
-  initSheets, addDealer, getDealers, getLeads, toggleDealer, updateDealer, deleteDealer,
-  getUnmatchedLeads, getAllLeads, assignLead, getDealer,
+  initDb,
+  addDealer, getDealers, getLeads, toggleDealer, updateDealer, deleteDealer,
+  getUnmatchedLeads, getAllLeads, assignLead, getDealer, getActiveDealers,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   activateDealerSubscription, resetDealerSubscription, saveLead, incrementDealerLeadCount,
   getFetchedPosts, getFetchedPost, getLead, cleanupOldData,
@@ -13,8 +14,8 @@ const {
   activateCandidateSubscription, resetCandidateSubscription, incrementCandidateLeadCount,
   saveJobMatch, getJobMatches,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
-  getDealerLeads, getCandidateJobMatches, readSheet,
-} = require('./sheets');
+  getLeadsByDealer, getCandidateJobMatches, getDealerLeadStats, getCandidateMatchCount,
+} = require('./db');
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription } = require('./crawler');
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription } = require('./jobs-crawler');
 const { sendLeadEmail, sendSubscriptionConfirmationEmail, sendPaymentRejectedEmail,
@@ -188,7 +189,7 @@ function createApp() {
   app.get('/api/dealers/:id/leads', requireAuth('dealer', 'admin'), async (req, res) => {
     try {
       const page = Math.min(parseInt(req.query.page) || 1, 100);
-      res.json(await getDealerLeads(parseInt(req.params.id), page));
+      res.json(getLeadsByDealer(parseInt(req.params.id), page));
     } catch (err) { res.status(500).json({ error: 'Failed to fetch leads' }); }
   });
 
@@ -196,13 +197,9 @@ function createApp() {
     try {
       const dealer = await getDealer(parseInt(req.params.id));
       if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
-      const allLeads = await readSheet('leads');
-      const myLeads = allLeads.filter(r => String(r.dealer_id) === String(req.params.id));
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const thisMonth = myLeads.filter(r => r.emailed_at >= monthStart).length;
+      const { total, thisMonth } = getDealerLeadStats(parseInt(req.params.id));
       res.json({
-        total_leads: myLeads.length,
+        total_leads: total,
         this_month: thisMonth,
         subscription_status: dealer.subscription_status,
         subscription_expires_at: dealer.subscription_expires_at,
@@ -224,10 +221,9 @@ function createApp() {
     try {
       const candidate = await getCandidate(parseInt(req.params.id));
       if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
-      const allMatches = await readSheet('job_matches');
-      const myMatches = allMatches.filter(r => String(r.candidate_id) === String(req.params.id));
+      const total_alerts = getCandidateMatchCount(parseInt(req.params.id));
       res.json({
-        total_alerts: myMatches.length,
+        total_alerts,
         subscription_status: candidate.subscription_status,
         subscription_expires_at: candidate.subscription_expires_at,
         lead_count: candidate.lead_count,
@@ -746,7 +742,7 @@ function createApp() {
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   (async () => {
-    await initSheets();
+    initDb();
     const app = createApp();
     app.listen(PORT, () => {
       console.log(`[server] Running at http://localhost:${PORT}`);

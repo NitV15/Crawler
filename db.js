@@ -215,6 +215,57 @@ function resetDealerSubscription(dealerId) {
     .run(String(dealerId));
 }
 
+// ─── Candidates ───────────────────────────────────────────────────────────────
+
+function addCandidate({ name, emails, role, skills, experience_level, city, state, preferred_locations }) {
+  const result = getDb().prepare(`
+    INSERT INTO candidates (name,emails,role,skills,experience_level,city,state,preferred_locations,lead_count,subscription_status,subscription_expires_at,active,created_at)
+    VALUES (?,?,?,?,?,?,?,?,0,'free','',1,?)
+  `).run(name,emails,role||'',skills||'',experience_level||'',city||'',state||'',preferred_locations||'',new Date().toISOString());
+  return result.lastInsertRowid;
+}
+
+function getCandidates() {
+  return getDb().prepare('SELECT * FROM candidates ORDER BY id ASC').all();
+}
+
+function getActiveCandidates() {
+  return getDb().prepare('SELECT * FROM candidates WHERE active = 1 ORDER BY id ASC').all();
+}
+
+function getCandidate(id) {
+  return getDb().prepare('SELECT * FROM candidates WHERE id = ?').get(String(id)) || null;
+}
+
+function updateCandidate(id, { name, emails, role, skills, experience_level, city, state, preferred_locations }) {
+  getDb().prepare(`
+    UPDATE candidates SET name=?,emails=?,role=?,skills=?,experience_level=?,city=?,state=?,preferred_locations=? WHERE id=?
+  `).run(name,emails,role||'',skills||'',experience_level||'',city||'',state||'',preferred_locations||'',String(id));
+}
+
+function toggleCandidate(id, active) {
+  getDb().prepare('UPDATE candidates SET active = ? WHERE id = ?').run(active ? 1 : 0, String(id));
+}
+
+function deleteCandidate(id) {
+  getDb().prepare('DELETE FROM candidates WHERE id = ?').run(String(id));
+}
+
+function incrementCandidateLeadCount(candidateId) {
+  getDb().prepare('UPDATE candidates SET lead_count = lead_count + 1 WHERE id = ?').run(String(candidateId));
+}
+
+function activateCandidateSubscription(candidateId) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  getDb().prepare('UPDATE candidates SET subscription_status=?,subscription_expires_at=?,lead_count=0 WHERE id=?')
+    .run('active', expiresAt, String(candidateId));
+}
+
+function resetCandidateSubscription(candidateId) {
+  getDb().prepare("UPDATE candidates SET subscription_status='free',subscription_expires_at='',lead_count=0 WHERE id=?")
+    .run(String(candidateId));
+}
+
 function syncJobMatches(rows) {
   const d = getDb();
   const insert = d.prepare(`
@@ -320,5 +371,7 @@ module.exports = {
   isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
   addDealer, getDealers, getActiveDealers, getDealer, updateDealer, toggleDealer, deleteDealer,
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
+  addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate,
+  deleteCandidate, incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,
   syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer,
 };

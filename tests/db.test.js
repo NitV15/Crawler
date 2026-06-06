@@ -94,3 +94,64 @@ test('resetDealerSubscription clears subscription', () => {
   expect(d.subscription_status).toBe('free');
   expect(d.subscription_expires_at).toBe('');
 });
+
+// ─── Candidates ────────────────────────────────────────────────────────────────
+
+const candidateData = {
+  name: 'Mitesh', emails: 'm@test.com', role: 'Backend Developer',
+  skills: 'Node.js, SQL', experience_level: '3-5 yr',
+  city: 'Ahmedabad', state: 'GJ', preferred_locations: 'Remote,Mumbai',
+};
+
+test('addCandidate returns id, getCandidate finds it', () => {
+  const id = db.addCandidate(candidateData);
+  const c = db.getCandidate(id);
+  expect(c.name).toBe('Mitesh');
+  expect(c.subscription_status).toBe('free');
+  expect(c.active).toBe(1);
+  expect(c.lead_count).toBe(0);
+});
+
+test('getActiveCandidates filters by active=1', () => {
+  const id1 = db.addCandidate(candidateData);
+  db.addCandidate({ ...candidateData, name: 'Krishan', emails: 'k@test.com' });
+  expect(db.getActiveCandidates()).toHaveLength(2);
+  db.toggleCandidate(id1, false);
+  expect(db.getActiveCandidates()).toHaveLength(1);
+});
+
+test('updateCandidate changes fields', () => {
+  const id = db.addCandidate(candidateData);
+  db.updateCandidate(id, { ...candidateData, city: 'Surat' });
+  expect(db.getCandidate(id).city).toBe('Surat');
+});
+
+test('deleteCandidate removes row', () => {
+  const id = db.addCandidate(candidateData);
+  db.deleteCandidate(id);
+  expect(db.getCandidate(id)).toBeNull();
+});
+
+test('incrementCandidateLeadCount increments by 1', () => {
+  const id = db.addCandidate(candidateData);
+  db.incrementCandidateLeadCount(id);
+  expect(db.getCandidate(id).lead_count).toBe(1);
+});
+
+test('activateCandidateSubscription sets active status, resets lead_count', () => {
+  const id = db.addCandidate(candidateData);
+  db.incrementCandidateLeadCount(id);
+  db.activateCandidateSubscription(id);
+  const c = db.getCandidate(id);
+  expect(c.subscription_status).toBe('active');
+  expect(c.lead_count).toBe(0);
+  expect(new Date(c.subscription_expires_at) > new Date()).toBe(true);
+});
+
+test('resetCandidateSubscription clears subscription', () => {
+  const id = db.addCandidate(candidateData);
+  db.activateCandidateSubscription(id);
+  db.resetCandidateSubscription(id);
+  expect(db.getCandidate(id).subscription_status).toBe('free');
+  expect(db.getCandidate(id).subscription_expires_at).toBe('');
+});

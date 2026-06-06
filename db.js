@@ -478,6 +478,10 @@ function cleanupOldData() {
   d.prepare('SELECT post_id FROM fetched_posts').all().forEach(r => seenPosts.add(r.post_id));
   seenFetchedJobs.clear();
   d.prepare('SELECT job_id FROM fetched_jobs').all().forEach(r => seenFetchedJobs.add(r.job_id));
+  // Re-sync seenJobs (job_matches are never deleted by cleanup, but keep consistent)
+  seenJobs.clear();
+  d.prepare('SELECT candidate_id, indeed_job_id FROM job_matches').all()
+    .forEach(r => seenJobs.add(`${r.candidate_id}:${r.indeed_job_id}`));
 
   return {
     deleted_fetched_posts:   r1.changes,

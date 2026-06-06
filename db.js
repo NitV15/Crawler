@@ -266,91 +266,42 @@ function resetCandidateSubscription(candidateId) {
     .run(String(candidateId));
 }
 
-function syncJobMatches(rows) {
-  const d = getDb();
-  const insert = d.prepare(`
-    INSERT OR IGNORE INTO job_matches
-      (candidate_id, indeed_job_id, job_title, company, location, job_url, snippet, suggested_tip, status, emailed_at)
-    VALUES
-      (@candidate_id, @indeed_job_id, @job_title, @company, @location, @job_url, @snippet, @suggested_tip, @status, @emailed_at)
-  `);
-  const insertMany = d.transaction(rs => { for (const r of rs) insert.run(r); });
-  insertMany(rows.map(r => ({
-    candidate_id:  String(r.candidate_id  ?? ''),
-    indeed_job_id: String(r.indeed_job_id ?? ''),
-    job_title:     String(r.job_title     ?? ''),
-    company:       String(r.company       ?? ''),
-    location:      String(r.location      ?? ''),
-    job_url:       String(r.job_url       ?? ''),
-    snippet:       String(r.snippet       ?? ''),
-    suggested_tip: String(r.suggested_tip ?? ''),
-    status:        String(r.status        ?? ''),
-    emailed_at:    String(r.emailed_at    ?? ''),
-  })));
-}
+// ─── Leads ────────────────────────────────────────────────────────────────────
 
-function syncLeads(rows) {
-  const d = getDb();
-  const insert = d.prepare(`
+function saveLead({ dealerId, redditPostId, postTitle, postText, postUrl, subreddit, matchReason, suggestedReply, whatToSell, leadCategory, postLocation, status }) {
+  getDb().prepare(`
     INSERT OR IGNORE INTO leads
-      (dealer_id, reddit_post_id, post_title, post_text, post_url, subreddit, match_reason, suggested_reply, what_to_sell, lead_category, post_location, status, emailed_at)
-    VALUES
-      (@dealer_id, @reddit_post_id, @post_title, @post_text, @post_url, @subreddit, @match_reason, @suggested_reply, @what_to_sell, @lead_category, @post_location, @status, @emailed_at)
-  `);
-  const insertMany = d.transaction(rs => { for (const r of rs) insert.run(r); });
-  insertMany(rows.map(r => ({
-    dealer_id:      String(r.dealer_id      ?? ''),
-    reddit_post_id: String(r.reddit_post_id ?? ''),
-    post_title:     String(r.post_title     ?? ''),
-    post_text:      String(r.post_text      ?? ''),
-    post_url:       String(r.post_url       ?? ''),
-    subreddit:      String(r.subreddit      ?? ''),
-    match_reason:   String(r.match_reason   ?? ''),
-    suggested_reply:String(r.suggested_reply?? ''),
-    what_to_sell:   String(r.what_to_sell   ?? ''),
-    lead_category:  String(r.lead_category  ?? ''),
-    post_location:  String(r.post_location  ?? ''),
-    status:         String(r.status         ?? ''),
-    emailed_at:     String(r.emailed_at     ?? ''),
-  })));
+      (dealer_id,reddit_post_id,post_title,post_text,post_url,subreddit,match_reason,suggested_reply,what_to_sell,lead_category,post_location,status,emailed_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(String(dealerId??''),redditPostId,postTitle||'',(postText||'').slice(0,500),postUrl||'',subreddit||'',matchReason||'',suggestedReply||'',whatToSell||'',leadCategory||'',postLocation||'',status||'matched',new Date().toISOString());
 }
 
-function insertJobMatch({ candidateId, indeedJobId, jobTitle, company, location, jobUrl, snippet, suggestedTip, status }) {
-  const d = getDb();
-  d.prepare(`
-    INSERT OR IGNORE INTO job_matches
-      (candidate_id, indeed_job_id, job_title, company, location, job_url, snippet, suggested_tip, status, emailed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    String(candidateId), indeedJobId, jobTitle || '', company || '',
-    location || '', jobUrl || '', snippet || '', suggestedTip || '',
-    status || 'matched', new Date().toISOString()
-  );
+function getLeads(limit = 50) {
+  return getDb().prepare(`
+    SELECT l.*, d.name as dealer_name, d.industry_category
+    FROM leads l LEFT JOIN dealers d ON d.id = l.dealer_id
+    WHERE l.status IN ('matched','assigned') ORDER BY l.id DESC LIMIT ?
+  `).all(limit);
 }
 
-function insertLead({ dealerId, redditPostId, postTitle, postText, postUrl, subreddit, matchReason, suggestedReply, whatToSell, leadCategory, postLocation, status }) {
-  const d = getDb();
-  d.prepare(`
-    INSERT OR IGNORE INTO leads
-      (dealer_id, reddit_post_id, post_title, post_text, post_url, subreddit, match_reason, suggested_reply, what_to_sell, lead_category, post_location, status, emailed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    String(dealerId), redditPostId, postTitle || '', (postText || '').slice(0, 500),
-    postUrl || '', subreddit || '', matchReason || '', suggestedReply || '',
-    whatToSell || '', leadCategory || '', postLocation || '',
-    status || 'matched', new Date().toISOString()
-  );
+function getAllLeads() {
+  return getDb().prepare(`
+    SELECT l.*, d.name as dealer_name
+    FROM leads l LEFT JOIN dealers d ON d.id = l.dealer_id
+    ORDER BY l.id DESC LIMIT 500
+  `).all();
 }
 
-function getJobMatchesByCandidate(candidateId, page = 1, pageSize = 20) {
-  const d = getDb();
-  const offset = (page - 1) * pageSize;
-  const items = d.prepare(`
-    SELECT * FROM job_matches WHERE candidate_id = ?
-    ORDER BY id DESC LIMIT ? OFFSET ?
-  `).all(String(candidateId), pageSize, offset);
-  const { total } = d.prepare(`SELECT COUNT(*) as total FROM job_matches WHERE candidate_id = ?`).get(String(candidateId));
-  return { items, total, page, pages: Math.ceil(total / pageSize) || 1 };
+function getUnmatchedLeads() {
+  return getDb().prepare("SELECT * FROM leads WHERE status = 'unmatched' ORDER BY id DESC").all();
+}
+
+function getLead(id) {
+  return getDb().prepare('SELECT * FROM leads WHERE id = ?').get(String(id)) || null;
+}
+
+function assignLead(leadId, dealerId) {
+  getDb().prepare("UPDATE leads SET dealer_id=?, status='assigned' WHERE id=?").run(String(dealerId), String(leadId));
 }
 
 function getLeadsByDealer(dealerId, page = 1, pageSize = 20) {
@@ -366,6 +317,66 @@ function getLeadsByDealer(dealerId, page = 1, pageSize = 20) {
   return { items, total, page, pages: Math.ceil(total / pageSize) || 1 };
 }
 
+// ─── Dealer Payments ──────────────────────────────────────────────────────────
+
+function addPayment({ dealerId, utrNumber }) {
+  const result = getDb().prepare(`
+    INSERT INTO payments (dealer_id,utr_number,amount,status,created_at,verified_at)
+    VALUES (?,?,'10','pending',?,'')
+  `).run(String(dealerId), utrNumber, new Date().toISOString());
+  return result.lastInsertRowid;
+}
+
+function getPayment(id) {
+  return getDb().prepare('SELECT * FROM payments WHERE id = ?').get(String(id)) || null;
+}
+
+function getPayments() {
+  return getDb().prepare(`
+    SELECT p.*, d.name as dealer_name, d.emails as dealer_emails
+    FROM payments p LEFT JOIN dealers d ON d.id = p.dealer_id ORDER BY p.id DESC
+  `).all();
+}
+
+function verifyPayment(id) {
+  getDb().prepare("UPDATE payments SET status='verified', verified_at=? WHERE id=?")
+    .run(new Date().toISOString(), String(id));
+}
+
+function rejectPayment(id) {
+  getDb().prepare("UPDATE payments SET status='rejected' WHERE id=?").run(String(id));
+}
+
+// ─── Candidate Payments ───────────────────────────────────────────────────────
+
+function addCandidatePayment({ candidateId, utrNumber }) {
+  const result = getDb().prepare(`
+    INSERT INTO candidate_payments (candidate_id,utr_number,amount,status,created_at,verified_at)
+    VALUES (?,?,'10','pending',?,'')
+  `).run(String(candidateId), utrNumber, new Date().toISOString());
+  return result.lastInsertRowid;
+}
+
+function getCandidatePayment(id) {
+  return getDb().prepare('SELECT * FROM candidate_payments WHERE id = ?').get(String(id)) || null;
+}
+
+function getCandidatePayments() {
+  return getDb().prepare(`
+    SELECT p.*, c.name as candidate_name, c.emails as candidate_emails
+    FROM candidate_payments p LEFT JOIN candidates c ON c.id = p.candidate_id ORDER BY p.id DESC
+  `).all();
+}
+
+function verifyCandidatePayment(id) {
+  getDb().prepare("UPDATE candidate_payments SET status='verified', verified_at=? WHERE id=?")
+    .run(new Date().toISOString(), String(id));
+}
+
+function rejectCandidatePayment(id) {
+  getDb().prepare("UPDATE candidate_payments SET status='rejected' WHERE id=?").run(String(id));
+}
+
 module.exports = {
   initDb, _getDb, _resetDb,
   isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
@@ -373,5 +384,7 @@ module.exports = {
   incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   addCandidate, getCandidates, getActiveCandidates, getCandidate, updateCandidate, toggleCandidate,
   deleteCandidate, incrementCandidateLeadCount, activateCandidateSubscription, resetCandidateSubscription,
-  syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer,
+  saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead, getLeadsByDealer,
+  addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
+  addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
 };

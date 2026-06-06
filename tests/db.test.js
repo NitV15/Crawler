@@ -155,3 +155,54 @@ test('resetCandidateSubscription clears subscription', () => {
   expect(db.getCandidate(id).subscription_status).toBe('free');
   expect(db.getCandidate(id).subscription_expires_at).toBe('');
 });
+
+// ─── Leads ─────────────────────────────────────────────────────────────────────
+
+test('saveLead deduplicates by dealer_id + reddit_post_id', () => {
+  db.saveLead({ dealerId: '1', redditPostId: 'r1', postTitle: 'T', postText: '', postUrl: 'u', subreddit: 's', matchReason: '', suggestedReply: '', whatToSell: '', leadCategory: '', postLocation: '', status: 'matched' });
+  db.saveLead({ dealerId: '1', redditPostId: 'r1', postTitle: 'Dup', postText: '', postUrl: 'u', subreddit: 's', matchReason: '', suggestedReply: '', whatToSell: '', leadCategory: '', postLocation: '', status: 'matched' });
+  expect(db.getLeads()).toHaveLength(1);
+});
+
+test('getLeads returns matched/assigned only', () => {
+  db.saveLead({ dealerId: '1', redditPostId: 'r1', postTitle: '', postText: '', postUrl: '', subreddit: '', matchReason: '', suggestedReply: '', whatToSell: '', leadCategory: '', postLocation: '', status: 'matched' });
+  db.saveLead({ dealerId: '1', redditPostId: 'r2', postTitle: '', postText: '', postUrl: '', subreddit: '', matchReason: '', suggestedReply: '', whatToSell: '', leadCategory: '', postLocation: '', status: 'unmatched' });
+  expect(db.getLeads()).toHaveLength(1);
+});
+
+test('assignLead updates dealer_id and status', () => {
+  db.saveLead({ dealerId: '1', redditPostId: 'r1', postTitle: '', postText: '', postUrl: '', subreddit: '', matchReason: '', suggestedReply: '', whatToSell: '', leadCategory: '', postLocation: '', status: 'unmatched' });
+  const lead = db.getUnmatchedLeads()[0];
+  db.assignLead(lead.id, '2');
+  expect(db.getLead(lead.id).status).toBe('assigned');
+  expect(db.getLead(lead.id).dealer_id).toBe('2');
+});
+
+// ─── Payments ──────────────────────────────────────────────────────────────────
+
+test('addPayment and getPayment', () => {
+  const id = db.addPayment({ dealerId: '1', utrNumber: 'UTR123' });
+  const p = db.getPayment(id);
+  expect(p.utr_number).toBe('UTR123');
+  expect(p.status).toBe('pending');
+});
+
+test('verifyPayment sets status and verified_at', () => {
+  const id = db.addPayment({ dealerId: '1', utrNumber: 'UTR456' });
+  db.verifyPayment(id);
+  expect(db.getPayment(id).status).toBe('verified');
+});
+
+test('rejectPayment sets status to rejected', () => {
+  const id = db.addPayment({ dealerId: '1', utrNumber: 'UTR789' });
+  db.rejectPayment(id);
+  expect(db.getPayment(id).status).toBe('rejected');
+});
+
+// ─── Candidate Payments ────────────────────────────────────────────────────────
+
+test('addCandidatePayment and verifyCandidatePayment', () => {
+  const id = db.addCandidatePayment({ candidateId: '1', utrNumber: 'CUTR1' });
+  db.verifyCandidatePayment(id);
+  expect(db.getCandidatePayment(id).status).toBe('verified');
+});

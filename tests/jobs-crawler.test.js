@@ -1,10 +1,10 @@
-jest.mock('../sheets');
+jest.mock('../db');
 jest.mock('../indeed-fetcher');
 jest.mock('../job-matcher');
 jest.mock('../mailer');
 
 const { startJobsCrawler, stopJobsCrawler, getJobsCrawlerStatus, checkCandidateSubscription, _clearWarnedCandidates } = require('../jobs-crawler');
-const sheets = require('../sheets');
+const sheets = require('../db');
 const { fetchIndeedJobs } = require('../indeed-fetcher');
 const { processJobBatch } = require('../job-matcher');
 const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('../mailer');

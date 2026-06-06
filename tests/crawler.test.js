@@ -1,4 +1,4 @@
-jest.mock('../sheets');
+jest.mock('../db');
 jest.mock('../matcher');
 jest.mock('../mailer');
 jest.mock('../prefilter');
@@ -6,7 +6,7 @@ jest.mock('../subreddits');
 jest.mock('../instagram-fetcher');
 
 const { startCrawler, stopCrawler, getCrawlerStatus, checkSubscription, _clearWarnedDealers } = require('../crawler');
-const sheets = require('../sheets');
+const sheets = require('../db');
 const { processPostBatch } = require('../matcher');
 const { sendLeadEmail, sendSubscriptionExpiryWarningEmail, sendSubscriptionExpiredEmail } = require('../mailer');
 const { shouldCheckPost } = require('../prefilter');

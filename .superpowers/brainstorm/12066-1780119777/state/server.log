@@ -1,0 +1,12 @@
+{"type":"server-started","port":63762,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:63762","screen_dir":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content","state_dir":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/state"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/login-flow.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/login-card-variations.html"}
+{"source":"user-event","type":"click","text":"Connect Market\n        Sign in to your Dealer Portal\n        \n          \n            Email address\n            dealer@example.com\n          \n        \n        Send OTP →\n        \n          \n          or\n          \n        \n        New dealer? Register here →\n      \n    \n    \n      A3 — Deep navy + glow button\n      Navy/indigo bg, blue glow on CTA, floating label input. Divider + register link below.","choice":"A3","id":null,"timestamp":1780120911609}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/dealer-portal.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/dealer-portal-themes.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/candidate-portal.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/profile-edit-placement.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/edit-profile-panel.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/edit-profile-modal.html"}
+{"type":"screen-added","file":"/home/rohit/claude-work/automation/crawler/.superpowers/brainstorm/12066-1780119777/content/otp-and-countdown.html"}
+{"type":"server-stopped","reason":"idle timeout"}

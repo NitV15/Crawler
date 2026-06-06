@@ -1,0 +1,56 @@
+<h2>Profile Edit — Where should it live?</h2>
+<p class="subtitle">Dealers & candidates can edit all their info except email. Pick the best placement.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="tab" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tab inside the portal</h3>
+      <p>Add a second tab — <strong>My Leads</strong> (current view) and <strong>My Profile</strong>. Clean separation, no page change needed. Fields appear below the nav when Profile tab is active.</p>
+      <div style="margin-top:10px;background:#13132b;border-radius:8px;padding:10px 14px;font-size:11px">
+        <div style="display:flex;gap:0;margin-bottom:8px">
+          <div style="background:#1e1e45;color:#7c7caa;padding:6px 14px;border-radius:6px 0 0 6px;font-size:10px">My Leads</div>
+          <div style="background:#4f6ef7;color:#fff;padding:6px 14px;border-radius:0 6px 6px 0;font-size:10px;font-weight:600">My Profile ✏️</div>
+        </div>
+        <div style="color:#7c7caa;font-size:10px">Name, Services, Keywords, City, State… all editable inline</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="dropdown" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Profile menu in top nav</h3>
+      <p>Clicking the dealer/candidate name in the top-right opens a dropdown with <strong>Edit Profile</strong> and <strong>Logout</strong>. Edit Profile slides open a panel or modal. No tabs needed.</p>
+      <div style="margin-top:10px;background:#13132b;border-radius:8px;padding:10px 14px;font-size:11px">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+          <div style="background:#1e1e45;border:1px solid #2a2a55;border-radius:8px;padding:6px 12px;font-size:10px">
+            <div style="color:#aab4ff;margin-bottom:4px">👤 Rajesh Motors ▾</div>
+            <div style="color:#7c7caa;padding:3px 0;border-bottom:1px solid #2a2a55">✏️ Edit Profile</div>
+            <div style="color:#7c7caa;padding:3px 0;margin-top:3px">🚪 Logout</div>
+          </div>
+        </div>
+        <div style="color:#7c7caa;font-size:10px">Opens a modal/side panel with all editable fields</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="section" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Section below the leads/alerts list</h3>
+      <p>Scroll down on the same page to find a <strong>My Profile</strong> section with an Edit button. Simple — no tabs, no dropdowns.</p>
+      <div style="margin-top:10px;background:#13132b;border-radius:8px;padding:10px 14px;font-size:11px">
+        <div style="border:1px solid #1e1e45;border-radius:6px;padding:8px 10px;margin-top:4px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="color:#fff;font-size:10px;font-weight:700">My Profile</div>
+            <div style="background:#1e1e45;color:#7c7caa;font-size:9px;padding:3px 8px;border-radius:4px">✏️ Edit</div>
+          </div>
+          <div style="color:#7c7caa;font-size:9px">Name · City · Keywords · Services…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

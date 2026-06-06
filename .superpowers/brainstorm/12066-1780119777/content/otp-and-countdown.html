@@ -1,0 +1,92 @@
+<h2>Last Two Screens</h2>
+<p class="subtitle">OTP entry (step 2 of login) and the inactivity countdown overlay.</p>
+
+<div class="split">
+
+  <!-- OTP ENTRY -->
+  <div class="mockup">
+    <div class="mockup-header">Step 2 — Enter OTP Code</div>
+    <div class="mockup-body" style="background:#0f0f23;min-height:400px;display:flex;align-items:center;justify-content:center;font-family:sans-serif">
+      <div style="background:#13132b;border-radius:16px;padding:32px 28px;width:290px;text-align:center;box-shadow:0 8px 40px rgba(79,110,247,0.15);border:1px solid #1e1e45">
+        <div style="color:#fff;font-weight:800;font-size:17px;margin-bottom:2px">Connect Market</div>
+        <div style="color:#7c7caa;font-size:11px;margin-bottom:6px">Dealer Portal</div>
+
+        <div style="background:#1e1e45;border-radius:8px;padding:10px 14px;margin-bottom:22px;text-align:left">
+          <div style="color:#7c7caa;font-size:10px;margin-bottom:2px">Code sent to</div>
+          <div style="color:#aab4ff;font-size:12px;font-weight:600">dealer@example.com</div>
+        </div>
+
+        <div style="color:#7c7caa;font-size:11px;margin-bottom:12px">Enter the 6-digit code</div>
+
+        <!-- 6 digit boxes -->
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px">
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #4f6ef7;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700">4</div>
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #4f6ef7;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700">8</div>
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #4f6ef7;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700">3</div>
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #2a2d45;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;opacity:0.3">_</div>
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #2a2d45;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;opacity:0.3">_</div>
+          <div style="width:36px;height:44px;background:#0f0f23;border:2px solid #2a2d45;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;opacity:0.3">_</div>
+        </div>
+
+        <div style="background:#4f6ef7;border-radius:10px;padding:13px;color:#fff;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(79,110,247,0.4);margin-bottom:16px">Verify Code</div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <div style="flex:1;height:1px;background:#1e1e45"></div>
+          <span style="color:#444;font-size:10px">or</span>
+          <div style="flex:1;height:1px;background:#1e1e45"></div>
+        </div>
+
+        <div style="color:#7c7caa;font-size:11px">Didn't get a code? <span style="color:#4f6ef7;font-weight:600">Resend →</span></div>
+        <div style="color:#555;font-size:10px;margin-top:8px">← Use a different email</div>
+
+        <div style="color:#444;font-size:10px;margin-top:14px">Code expires in <span style="color:#f59e0b;font-weight:600">08:42</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INACTIVITY COUNTDOWN -->
+  <div class="mockup">
+    <div class="mockup-header">Inactivity Warning — 15 min timeout</div>
+    <div class="mockup-body" style="background:#0f0f23;min-height:400px;position:relative;font-family:sans-serif;overflow:hidden">
+
+      <!-- Blurred portal behind -->
+      <div style="padding:14px 16px;filter:blur(2px);opacity:0.4">
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:8px;height:50px;margin-bottom:10px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="background:#13132b;border:1px solid #1e1e45;border-radius:8px;height:60px"></div>
+          <div style="background:#13132b;border:1px solid #1e1e45;border-radius:8px;height:60px"></div>
+          <div style="background:#13132b;border:1px solid #1e1e45;border-radius:8px;height:60px"></div>
+        </div>
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:8px;height:120px"></div>
+      </div>
+
+      <!-- Countdown overlay -->
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center">
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:16px;padding:28px 24px;width:76%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.8)">
+
+          <!-- Countdown ring -->
+          <div style="width:72px;height:72px;border-radius:50%;border:3px solid #1e1e45;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;position:relative;background:conic-gradient(#f59e0b 75%, #1e1e45 75%)">
+            <div style="width:58px;height:58px;border-radius:50%;background:#13132b;display:flex;align-items:center;justify-content:center">
+              <span style="color:#f59e0b;font-size:20px;font-weight:800">45</span>
+            </div>
+          </div>
+
+          <div style="color:#fff;font-weight:700;font-size:14px;margin-bottom:6px">Still there?</div>
+          <div style="color:#7c7caa;font-size:11px;margin-bottom:20px">You've been inactive for 15 minutes.<br/>You'll be logged out in <span style="color:#f59e0b;font-weight:600">45 seconds</span>.</div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:#1e1e45;border-radius:8px;padding:10px;color:#7c7caa;font-size:11px;font-weight:600">Logout now</div>
+            <div style="background:linear-gradient(135deg,#4f6ef7,#7c3aed);border-radius:8px;padding:10px;color:#fff;font-size:11px;font-weight:700;box-shadow:0 4px 12px rgba(79,110,247,0.3)">Stay logged in</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:16px;background:#13132b;border-radius:8px;padding:12px 16px;color:#7c7caa;font-size:11px;line-height:1.7">
+  <strong style="color:#fff">OTP screen:</strong> 6 individual digit boxes, active ones highlighted in blue. Shows email it was sent to, expiry countdown (10 min), resend link, and back link.<br/>
+  <strong style="color:#fff">Countdown:</strong> Circular progress ring counts down from 60s in amber. "Stay logged in" resets the 15-min timer. "Logout now" ends the session immediately. If neither is clicked → auto-logout at 0.
+</div>

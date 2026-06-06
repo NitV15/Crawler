@@ -1,0 +1,88 @@
+<h2>Dealer Portal — Layout</h2>
+<p class="subtitle">What a dealer sees after logging in. Same dark navy theme as A3 login.</p>
+
+<div class="mockup">
+  <div class="mockup-header">http://localhost:3000/dealer-portal.html — Dealer Dashboard</div>
+  <div class="mockup-body" style="background:#0f0f23;min-height:520px;font-family:sans-serif;padding:0">
+
+    <!-- Top nav -->
+    <div style="background:#13132b;border-bottom:1px solid #1e1e45;padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <span style="color:#fff;font-weight:800;font-size:15px">Connect Market</span>
+        <span style="color:#7c7caa;font-size:11px;margin-left:10px">Dealer Portal</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="color:#aab4ff;font-size:12px">👤 Rajesh Motors</div>
+        <div style="background:#1e1e45;color:#7c7caa;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer">Logout</div>
+      </div>
+    </div>
+
+    <div style="padding:20px 24px">
+
+      <!-- Subscription banner — EXPIRY WARNING state -->
+      <div style="background:#2a1a0a;border:1px solid #5a3a0a;border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <div style="color:#f59e0b;font-weight:700;font-size:13px">⚠️ Subscription expires in 2 days</div>
+          <div style="color:#a07040;font-size:11px;margin-top:3px">Renew now to keep receiving leads without interruption</div>
+        </div>
+        <div style="background:#f59e0b;color:#000;font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;white-space:nowrap">Renew ₹10</div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:10px;padding:16px">
+          <div style="color:#7c7caa;font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px">TOTAL LEADS</div>
+          <div style="color:#fff;font-size:24px;font-weight:800">14</div>
+        </div>
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:10px;padding:16px">
+          <div style="color:#7c7caa;font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px">SUBSCRIPTION</div>
+          <div style="color:#4ade80;font-size:14px;font-weight:700;margin-top:4px">Active</div>
+          <div style="color:#555;font-size:10px">Expires 02 Jun 2026</div>
+        </div>
+        <div style="background:#13132b;border:1px solid #1e1e45;border-radius:10px;padding:16px">
+          <div style="color:#7c7caa;font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:6px">THIS MONTH</div>
+          <div style="color:#fff;font-size:24px;font-weight:800">6</div>
+        </div>
+      </div>
+
+      <!-- Leads table -->
+      <div style="background:#13132b;border:1px solid #1e1e45;border-radius:10px;overflow:hidden">
+        <div style="padding:14px 18px;border-bottom:1px solid #1e1e45;display:flex;align-items:center;justify-content:space-between">
+          <div style="color:#fff;font-weight:700;font-size:13px">Your Leads</div>
+          <div style="color:#7c7caa;font-size:11px">Latest first</div>
+        </div>
+        <!-- Lead row 1 -->
+        <div style="padding:14px 18px;border-bottom:1px solid #1a1a38;display:grid;grid-template-columns:1fr auto;gap:12px">
+          <div>
+            <div style="color:#e0e0ff;font-size:12px;font-weight:600;margin-bottom:4px">Looking for office furniture in Faridabad sector 15</div>
+            <div style="color:#555;font-size:10px">r/Faridabad · 2 hours ago · Furniture & Home Decor</div>
+            <div style="color:#7c7caa;font-size:11px;margin-top:6px;font-style:italic">"You could pitch your ergonomic office chairs and desks..."</div>
+          </div>
+          <a style="color:#4f6ef7;font-size:11px;font-weight:600;white-space:nowrap;text-decoration:none;align-self:start">View Post →</a>
+        </div>
+        <!-- Lead row 2 -->
+        <div style="padding:14px 18px;border-bottom:1px solid #1a1a38;display:grid;grid-template-columns:1fr auto;gap:12px">
+          <div>
+            <div style="color:#e0e0ff;font-size:12px;font-weight:600;margin-bottom:4px">Need a sofa set urgently for new flat in Gurugram</div>
+            <div style="color:#555;font-size:10px">r/Gurugram · 1 day ago · Furniture & Home Decor</div>
+            <div style="color:#7c7caa;font-size:11px;margin-top:6px;font-style:italic">"Offer same-day delivery to stand out..."</div>
+          </div>
+          <a style="color:#4f6ef7;font-size:11px;font-weight:600;white-space:nowrap;text-decoration:none;align-self:start">View Post →</a>
+        </div>
+        <!-- Lead row 3 muted -->
+        <div style="padding:14px 18px;display:grid;grid-template-columns:1fr auto;gap:12px;opacity:0.5">
+          <div>
+            <div style="color:#e0e0ff;font-size:12px;font-weight:600;margin-bottom:4px">Want to buy dining table set under 20k Delhi</div>
+            <div style="color:#555;font-size:10px">r/Delhi · 3 days ago · Furniture & Home Decor</div>
+          </div>
+          <a style="color:#4f6ef7;font-size:11px;font-weight:600;white-space:nowrap;text-decoration:none;align-self:start">View Post →</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:20px;color:#888;font-size:12px">
+  ℹ️ The warning banner changes based on state: <strong style="color:#f59e0b">orange = expiring soon</strong>, <strong style="color:#ef4444">red = expired (subscribe to unlock)</strong>, <strong style="color:#4ade80">hidden = active & healthy</strong>. Does this layout look right?
+</div>

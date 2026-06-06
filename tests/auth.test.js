@@ -53,26 +53,61 @@ describe('requireAuth', () => {
   });
 });
 
-jest.mock('../sheets', () => ({
-  getDealers: jest.fn(),
-  getCandidates: jest.fn(),
-  getDealer: jest.fn(),
-  getCandidate: jest.fn(),
-  getLeads: jest.fn(),
-  getUnmatchedLeads: jest.fn(),
-  getAllLeads: jest.fn(),
-  getActiveDealers: jest.fn().mockResolvedValue([]),
-  getActiveCandidates: jest.fn().mockResolvedValue([]),
-  getFetchedPosts: jest.fn().mockResolvedValue([]),
-  getFetchedJobs: jest.fn().mockResolvedValue([]),
-  getPayments: jest.fn().mockResolvedValue([]),
-  getCandidatePayments: jest.fn().mockResolvedValue([]),
-  getJobMatches: jest.fn().mockResolvedValue([]),
+jest.mock('../db', () => ({
+  initDb: jest.fn(),
+  getDealers: jest.fn().mockReturnValue([]),
+  getCandidates: jest.fn().mockReturnValue([]),
+  getDealer: jest.fn().mockReturnValue(null),
+  getCandidate: jest.fn().mockReturnValue(null),
+  getLeads: jest.fn().mockReturnValue([]),
+  getUnmatchedLeads: jest.fn().mockReturnValue([]),
+  getAllLeads: jest.fn().mockReturnValue([]),
+  getActiveDealers: jest.fn().mockReturnValue([]),
+  getActiveCandidates: jest.fn().mockReturnValue([]),
+  getFetchedPosts: jest.fn().mockReturnValue([]),
+  getFetchedJobs: jest.fn().mockReturnValue([]),
+  getPayments: jest.fn().mockReturnValue([]),
+  getCandidatePayments: jest.fn().mockReturnValue([]),
+  getJobMatches: jest.fn().mockReturnValue([]),
   addDealer: jest.fn(),
   addCandidate: jest.fn(),
   saveLead: jest.fn(),
-  initSheets: jest.fn().mockResolvedValue(),
-  readSheet: jest.fn().mockResolvedValue([]),
+  addPayment: jest.fn().mockReturnValue(1),
+  getPayment: jest.fn().mockReturnValue(null),
+  verifyPayment: jest.fn(),
+  rejectPayment: jest.fn(),
+  addCandidatePayment: jest.fn().mockReturnValue(1),
+  getCandidatePayment: jest.fn().mockReturnValue(null),
+  verifyCandidatePayment: jest.fn(),
+  rejectCandidatePayment: jest.fn(),
+  toggleDealer: jest.fn(),
+  updateDealer: jest.fn(),
+  deleteDealer: jest.fn(),
+  incrementDealerLeadCount: jest.fn(),
+  activateDealerSubscription: jest.fn(),
+  resetDealerSubscription: jest.fn(),
+  toggleCandidate: jest.fn(),
+  updateCandidate: jest.fn(),
+  deleteCandidate: jest.fn(),
+  incrementCandidateLeadCount: jest.fn(),
+  activateCandidateSubscription: jest.fn(),
+  resetCandidateSubscription: jest.fn(),
+  saveFetchedPost: jest.fn(),
+  getFetchedPost: jest.fn().mockReturnValue(null),
+  saveFetchedJob: jest.fn(),
+  getFetchedJob: jest.fn().mockReturnValue(null),
+  saveJobMatch: jest.fn(),
+  getCandidateJobMatches: jest.fn().mockReturnValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getLeadsByDealer: jest.fn().mockReturnValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getDealerLeadStats: jest.fn().mockReturnValue({ total: 0, thisMonth: 0 }),
+  getCandidateMatchCount: jest.fn().mockReturnValue(0),
+  getLead: jest.fn().mockReturnValue(null),
+  assignLead: jest.fn(),
+  cleanupOldData: jest.fn().mockReturnValue({ deleted_fetched_posts: 0, deleted_fetched_jobs: 0, deleted_unmatched_leads: 0 }),
+  isSeenPost: jest.fn().mockReturnValue(false),
+  markPostSeen: jest.fn(),
+  isSeenJob: jest.fn().mockReturnValue(false),
+  markJobSeen: jest.fn(),
 }));
 jest.mock('../mailer', () => ({
   sendOtpEmail: jest.fn().mockResolvedValue(),
@@ -105,17 +140,17 @@ describe('POST /api/auth/request-otp', () => {
   });
 
   test('returns 404 when dealer email not found', async () => {
-    const { getDealers } = require('../sheets');
-    getDealers.mockResolvedValue([{ id: '1', emails: 'other@b.com', active: '1' }]);
+    const { getDealers } = require('../db');
+    getDealers.mockReturnValue([{ id: '1', emails: 'other@b.com', active: '1' }]);
     const res = await request(app).post('/api/auth/request-otp').send({ email: 'a@b.com', type: 'dealer' });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Email not found');
   });
 
   test('sends OTP and returns 200 for known dealer email', async () => {
-    const { getDealers } = require('../sheets');
+    const { getDealers } = require('../db');
     const { sendOtpEmail } = require('../mailer');
-    getDealers.mockResolvedValue([{ id: '5', name: 'Test', emails: 'a@b.com', active: '1' }]);
+    getDealers.mockReturnValue([{ id: '5', name: 'Test', emails: 'a@b.com', active: '1' }]);
     const res = await request(app).post('/api/auth/request-otp').send({ email: 'a@b.com', type: 'dealer' });
     expect(res.status).toBe(200);
     expect(sendOtpEmail).toHaveBeenCalledWith('a@b.com', expect.stringMatching(/^\d{6}$/));
@@ -127,8 +162,8 @@ describe('POST /api/auth/verify-otp', () => {
   beforeEach(() => { app = createApp(); });
 
   test('returns 400 for wrong OTP', async () => {
-    const { getDealers } = require('../sheets');
-    getDealers.mockResolvedValue([{ id: '5', name: 'Test', emails: 'a@b.com', active: '1' }]);
+    const { getDealers } = require('../db');
+    getDealers.mockReturnValue([{ id: '5', name: 'Test', emails: 'a@b.com', active: '1' }]);
     await request(app).post('/api/auth/request-otp').send({ email: 'a@b.com', type: 'dealer' });
     const res = await request(app).post('/api/auth/verify-otp').send({ email: 'a@b.com', otp: '000000', type: 'dealer' });
     expect(res.status).toBe(400);

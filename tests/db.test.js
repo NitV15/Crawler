@@ -206,3 +206,43 @@ test('addCandidatePayment and verifyCandidatePayment', () => {
   db.verifyCandidatePayment(id);
   expect(db.getCandidatePayment(id).status).toBe('verified');
 });
+
+// ─── Fetched Posts ─────────────────────────────────────────────────────────────
+
+test('saveFetchedPost deduplicates by post_id', () => {
+  db.saveFetchedPost({ postId: 'p1', postTitle: 'T', postText: '', postUrl: 'u', subreddit: 'r' });
+  db.saveFetchedPost({ postId: 'p1', postTitle: 'Dup', postText: '', postUrl: 'u', subreddit: 'r' });
+  expect(db.getFetchedPosts()).toHaveLength(1);
+  expect(db.isSeenPost('p1')).toBe(true);
+});
+
+test('getFetchedPost finds by id', () => {
+  db.saveFetchedPost({ postId: 'p2', postTitle: 'T2', postText: '', postUrl: 'u', subreddit: 'r' });
+  const posts = db.getFetchedPosts();
+  expect(db.getFetchedPost(posts[0].id)).toBeTruthy();
+});
+
+// ─── Fetched Jobs ──────────────────────────────────────────────────────────────
+
+test('saveFetchedJob deduplicates by job_id', () => {
+  db.saveFetchedJob({ jobId: 'j1', jobTitle: 'Dev', company: 'Co', location: 'MH', jobUrl: 'u', snippet: 's' });
+  db.saveFetchedJob({ jobId: 'j1', jobTitle: 'Dup', company: 'Co', location: 'MH', jobUrl: 'u', snippet: 's' });
+  expect(db.getFetchedJobs()).toHaveLength(1);
+  expect(db.isSeenFetchedJob('j1')).toBe(true);
+});
+
+test('batchSaveFetchedJobs inserts multiple, skips duplicates', () => {
+  db.batchSaveFetchedJobs([
+    { jobId: 'j1', jobTitle: 'A', company: 'Co', location: 'L', jobUrl: 'u', snippet: '' },
+    { jobId: 'j2', jobTitle: 'B', company: 'Co', location: 'L', jobUrl: 'u', snippet: '' },
+    { jobId: 'j1', jobTitle: 'Dup', company: 'Co', location: 'L', jobUrl: 'u', snippet: '' },
+  ]);
+  expect(db.getFetchedJobs()).toHaveLength(2);
+});
+
+test('getFetchedJobs(0) returns all rows, getFetchedJobs(1) returns 1', () => {
+  db.saveFetchedJob({ jobId: 'j1', jobTitle: '', company: '', location: '', jobUrl: '', snippet: '' });
+  db.saveFetchedJob({ jobId: 'j2', jobTitle: '', company: '', location: '', jobUrl: '', snippet: '' });
+  expect(db.getFetchedJobs(0)).toHaveLength(2);
+  expect(db.getFetchedJobs(1)).toHaveLength(1);
+});

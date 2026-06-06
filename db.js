@@ -377,6 +377,60 @@ function rejectCandidatePayment(id) {
   getDb().prepare("UPDATE candidate_payments SET status='rejected' WHERE id=?").run(String(id));
 }
 
+// ─── Fetched Posts ────────────────────────────────────────────────────────────
+
+function saveFetchedPost({ postId, postTitle, postText, postUrl, subreddit }) {
+  if (seenPosts.has(postId)) return;
+  seenPosts.add(postId);
+  getDb().prepare(`
+    INSERT OR IGNORE INTO fetched_posts (post_id,post_title,post_text,post_url,subreddit,fetched_at)
+    VALUES (?,?,?,?,?,?)
+  `).run(postId, postTitle||'', (postText||'').slice(0,500), postUrl||'', subreddit||'', new Date().toISOString());
+}
+
+function getFetchedPosts(limit = 200) {
+  const rows = getDb().prepare('SELECT * FROM fetched_posts ORDER BY id DESC').all();
+  return limit > 0 ? rows.slice(0, limit) : rows;
+}
+
+function getFetchedPost(id) {
+  return getDb().prepare('SELECT * FROM fetched_posts WHERE id = ?').get(String(id)) || null;
+}
+
+// ─── Fetched Jobs ─────────────────────────────────────────────────────────────
+
+function saveFetchedJob({ jobId, jobTitle, company, location, jobUrl, snippet }) {
+  if (seenFetchedJobs.has(jobId)) return;
+  seenFetchedJobs.add(jobId);
+  getDb().prepare(`
+    INSERT OR IGNORE INTO fetched_jobs (job_id,job_title,company,location,job_url,snippet,fetched_at)
+    VALUES (?,?,?,?,?,?,?)
+  `).run(jobId, jobTitle||'', company||'', location||'', jobUrl||'', (snippet||'').slice(0,500), new Date().toISOString());
+}
+
+function batchSaveFetchedJobs(jobs) {
+  const newJobs = jobs.filter(j => !seenFetchedJobs.has(j.jobId));
+  if (!newJobs.length) return;
+  const insert = getDb().prepare(`
+    INSERT OR IGNORE INTO fetched_jobs (job_id,job_title,company,location,job_url,snippet,fetched_at)
+    VALUES (?,?,?,?,?,?,?)
+  `);
+  const now = new Date().toISOString();
+  getDb().transaction(js => {
+    for (const j of js) insert.run(j.jobId, j.jobTitle||'', j.company||'', j.location||'', j.jobUrl||'', (j.snippet||'').slice(0,500), now);
+  })(newJobs);
+  newJobs.forEach(j => seenFetchedJobs.add(j.jobId));
+}
+
+function getFetchedJobs(limit = 200) {
+  const rows = getDb().prepare('SELECT * FROM fetched_jobs ORDER BY id DESC').all();
+  return limit > 0 ? rows.slice(0, limit) : rows;
+}
+
+function getFetchedJob(id) {
+  return getDb().prepare('SELECT * FROM fetched_jobs WHERE id = ?').get(String(id)) || null;
+}
+
 module.exports = {
   initDb, _getDb, _resetDb,
   isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
@@ -387,4 +441,6 @@ module.exports = {
   saveLead, getLeads, getAllLeads, getUnmatchedLeads, getLead, assignLead, getLeadsByDealer,
   addPayment, getPayment, getPayments, verifyPayment, rejectPayment,
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
+  saveFetchedPost, getFetchedPosts, getFetchedPost,
+  saveFetchedJob, batchSaveFetchedJobs, getFetchedJobs, getFetchedJob,
 };

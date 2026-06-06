@@ -431,6 +431,76 @@ function getFetchedJob(id) {
   return getDb().prepare('SELECT * FROM fetched_jobs WHERE id = ?').get(String(id)) || null;
 }
 
+// ─── Job Matches ──────────────────────────────────────────────────────────────
+
+function saveJobMatch({ candidateId, indeedJobId, jobTitle, company, location, jobUrl, snippet, suggestedTip, status }) {
+  const key = `${candidateId}:${indeedJobId}`;
+  if (seenJobs.has(key)) return;
+  seenJobs.add(key);
+  getDb().prepare(`
+    INSERT OR IGNORE INTO job_matches
+      (candidate_id,indeed_job_id,job_title,company,location,job_url,snippet,suggested_tip,status,emailed_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+  `).run(String(candidateId),indeedJobId,jobTitle||'',company||'',location||'',jobUrl||'',snippet||'',suggestedTip||'',status||'matched',new Date().toISOString());
+}
+
+function getJobMatches(limit = 200) {
+  return getDb().prepare(`
+    SELECT j.*, c.name as candidate_name
+    FROM job_matches j LEFT JOIN candidates c ON c.id = j.candidate_id
+    ORDER BY j.id DESC LIMIT ?
+  `).all(limit);
+}
+
+function getCandidateJobMatches(candidateId, page = 1, pageSize = 20) {
+  const d = getDb();
+  const offset = (page - 1) * pageSize;
+  const items = d.prepare(`
+    SELECT * FROM job_matches WHERE candidate_id = ? ORDER BY id DESC LIMIT ? OFFSET ?
+  `).all(String(candidateId), pageSize, offset);
+  const { total } = d.prepare('SELECT COUNT(*) as total FROM job_matches WHERE candidate_id = ?').get(String(candidateId));
+  return { items, total, page, pages: Math.ceil(total / pageSize) || 1 };
+}
+
+// ─── Cleanup ──────────────────────────────────────────────────────────────────
+
+function cleanupOldData() {
+  const d = getDb();
+  const fiveDaysAgo   = new Date(Date.now() - 5  * 86400000).toISOString();
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+
+  const r1 = d.prepare('DELETE FROM fetched_posts WHERE fetched_at < ?').run(fiveDaysAgo);
+  const r2 = d.prepare('DELETE FROM fetched_jobs  WHERE fetched_at < ?').run(fiveDaysAgo);
+  const r3 = d.prepare("DELETE FROM leads WHERE status='unmatched' AND emailed_at < ?").run(ninetyDaysAgo);
+
+  // Re-sync seen sets from remaining DB rows
+  seenPosts.clear();
+  d.prepare('SELECT post_id FROM fetched_posts').all().forEach(r => seenPosts.add(r.post_id));
+  seenFetchedJobs.clear();
+  d.prepare('SELECT job_id FROM fetched_jobs').all().forEach(r => seenFetchedJobs.add(r.job_id));
+
+  return {
+    deleted_fetched_posts:   r1.changes,
+    deleted_fetched_jobs:    r2.changes,
+    deleted_unmatched_leads: r3.changes,
+  };
+}
+
+// ─── Stats helpers ─────────────────────────────────────────────────────────────
+
+function getDealerLeadStats(dealerId) {
+  const d = getDb();
+  const total = d.prepare('SELECT COUNT(*) as c FROM leads WHERE dealer_id = ?').get(String(dealerId)).c;
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const thisMonth = d.prepare('SELECT COUNT(*) as c FROM leads WHERE dealer_id = ? AND emailed_at >= ?').get(String(dealerId), monthStart).c;
+  return { total, thisMonth };
+}
+
+function getCandidateMatchCount(candidateId) {
+  return getDb().prepare('SELECT COUNT(*) as c FROM job_matches WHERE candidate_id = ?').get(String(candidateId)).c;
+}
+
 module.exports = {
   initDb, _getDb, _resetDb,
   isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
@@ -443,4 +513,6 @@ module.exports = {
   addCandidatePayment, getCandidatePayment, getCandidatePayments, verifyCandidatePayment, rejectCandidatePayment,
   saveFetchedPost, getFetchedPosts, getFetchedPost,
   saveFetchedJob, batchSaveFetchedJobs, getFetchedJobs, getFetchedJob,
+  saveJobMatch, getJobMatches, getCandidateJobMatches,
+  cleanupOldData, getDealerLeadStats, getCandidateMatchCount,
 };

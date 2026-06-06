@@ -246,3 +246,63 @@ test('getFetchedJobs(0) returns all rows, getFetchedJobs(1) returns 1', () => {
   expect(db.getFetchedJobs(0)).toHaveLength(2);
   expect(db.getFetchedJobs(1)).toHaveLength(1);
 });
+
+// ─── Job Matches ───────────────────────────────────────────────────────────────
+
+test('saveJobMatch deduplicates by candidate_id + indeed_job_id', () => {
+  db.saveJobMatch({ candidateId: '1', indeedJobId: 'jx', jobTitle: 'Dev', company: 'Co', location: 'L', jobUrl: 'u', snippet: '', suggestedTip: '', status: 'matched' });
+  db.saveJobMatch({ candidateId: '1', indeedJobId: 'jx', jobTitle: 'Dup', company: 'Co', location: 'L', jobUrl: 'u', snippet: '', suggestedTip: '', status: 'matched' });
+  expect(db.getJobMatches()).toHaveLength(1);
+  expect(db.isSeenJob('jx', '1')).toBe(true);
+});
+
+test('isSeenJob is per-candidate — different candidates can see same job', () => {
+  db.saveJobMatch({ candidateId: '1', indeedJobId: 'jy', jobTitle: '', company: '', location: '', jobUrl: '', snippet: '', suggestedTip: '', status: 'matched' });
+  expect(db.isSeenJob('jy', '2')).toBe(false);
+  db.markJobSeen('jy', '2');
+  expect(db.isSeenJob('jy', '2')).toBe(true);
+});
+
+test('getCandidateJobMatches paginates', () => {
+  for (let i = 0; i < 5; i++) {
+    db.saveJobMatch({ candidateId: '1', indeedJobId: `job${i}`, jobTitle: `J${i}`, company: '', location: '', jobUrl: '', snippet: '', suggestedTip: '', status: 'matched' });
+  }
+  const page1 = db.getCandidateJobMatches('1', 1, 3);
+  expect(page1.items).toHaveLength(3);
+  expect(page1.total).toBe(5);
+  expect(page1.pages).toBe(2);
+});
+
+// ─── cleanupOldData ────────────────────────────────────────────────────────────
+
+test('cleanupOldData deletes fetched_posts older than 5 days', () => {
+  const old = new Date(Date.now() - 6 * 86400000).toISOString();
+  const fresh = new Date().toISOString();
+  db._getDb().prepare("INSERT INTO fetched_posts (post_id,fetched_at) VALUES ('old1',?)").run(old);
+  db._getDb().prepare("INSERT INTO fetched_posts (post_id,fetched_at) VALUES ('new1',?)").run(fresh);
+  const result = db.cleanupOldData();
+  expect(result.deleted_fetched_posts).toBe(1);
+  expect(result.deleted_fetched_jobs).toBe(0);
+  expect(db.getFetchedPosts()).toHaveLength(1);
+  expect(db.isSeenPost('old1')).toBe(false);
+  expect(db.isSeenPost('new1')).toBe(true);
+});
+
+test('cleanupOldData deletes fetched_jobs older than 5 days', () => {
+  const old = new Date(Date.now() - 6 * 86400000).toISOString();
+  db._getDb().prepare("INSERT INTO fetched_jobs (job_id,fetched_at) VALUES ('oldjob',?)").run(old);
+  db._getDb().prepare("INSERT INTO fetched_jobs (job_id,fetched_at) VALUES ('newjob',?)").run(new Date().toISOString());
+  const result = db.cleanupOldData();
+  expect(result.deleted_fetched_jobs).toBe(1);
+  expect(db.isSeenFetchedJob('oldjob')).toBe(false);
+  expect(db.isSeenFetchedJob('newjob')).toBe(true);
+});
+
+test('cleanupOldData deletes unmatched leads older than 90 days', () => {
+  const old = new Date(Date.now() - 91 * 86400000).toISOString();
+  db._getDb().prepare("INSERT INTO leads (dealer_id,reddit_post_id,status,emailed_at) VALUES ('1','r1','unmatched',?)").run(old);
+  db._getDb().prepare("INSERT INTO leads (dealer_id,reddit_post_id,status,emailed_at) VALUES ('1','r2','matched',?)").run(old);
+  const result = db.cleanupOldData();
+  expect(result.deleted_unmatched_leads).toBe(1);
+  expect(db.getAllLeads()).toHaveLength(1);
+});

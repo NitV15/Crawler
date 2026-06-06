@@ -77,7 +77,7 @@ test('startJobsCrawler fetches jobs per candidate and sends email', async () => 
   });
   await startJobsCrawler();
 
-  expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', '', 'Bangalore');
+  expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', 'Docker, Kubernetes', 'Bangalore');
   expect(processJobBatch).toHaveBeenCalled();
   expect(sendJobAlertEmail).toHaveBeenCalledTimes(1);
   expect(sheets.saveJobMatch).toHaveBeenCalled();
@@ -171,10 +171,10 @@ test('catch-up: new candidate (lead_count=0) gets fetched_jobs buffered', async 
   expect(sendJobAlertEmail).toHaveBeenCalled();
 });
 
-test('catch-up: candidate with lead_count>0 does NOT get catch-up jobs', async () => {
-  const existingCandidate = { ...activeCandidate, lead_count: 3 };
-  sheets.getActiveCandidates.mockResolvedValue([existingCandidate]);
-  sheets.getCandidate.mockResolvedValue(existingCandidate);
+test('catch-up: free candidate with lead_count>0 does NOT get catch-up jobs', async () => {
+  const freeExistingCandidate = { ...activeCandidate, lead_count: 3, subscription_status: 'free' };
+  sheets.getActiveCandidates.mockResolvedValue([freeExistingCandidate]);
+  sheets.getCandidate.mockResolvedValue(freeExistingCandidate);
   sheets.getFetchedJobs.mockResolvedValue([fetchedJob]);
   fetchIndeedJobs.mockImplementation(async () => {
     stopJobsCrawler();
@@ -245,4 +245,43 @@ describe('candidate expiry notifications', () => {
       expect.stringContaining('/candidate-pay?candidate_id=88')
     );
   });
+});
+
+// Fix 1: skip logging
+test('logs SKIP with candidate name when relevant job found but candidate at free limit', async () => {
+  const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  sheets.getCandidate.mockResolvedValue({ ...freeCandidate, lead_count: 2 });
+  processJobBatch.mockImplementation(async () => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }];
+  });
+  await startJobsCrawler();
+  expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/SKIP.*Raj Kumar/i));
+  logSpy.mockRestore();
+});
+
+// Fix 2: skills passed to Adzuna
+test('passes candidate skills to fetchIndeedJobs', async () => {
+  processJobBatch.mockImplementation(async () => {
+    stopJobsCrawler();
+    return [{ index: 0, is_relevant: true, suggested_tip: 'Highlight K8s.' }];
+  });
+  await startJobsCrawler();
+  expect(fetchIndeedJobs).toHaveBeenCalledWith('DevOps Engineer', 'Docker, Kubernetes', 'Bangalore');
+});
+
+// Fix 3: catch-up extended to active subscribers
+test('catch-up: active subscriber with lead_count>0 gets buffered with fetched_jobs', async () => {
+  const paidCandidate = { ...activeCandidate, lead_count: 3 };
+  sheets.getActiveCandidates.mockResolvedValue([paidCandidate]);
+  sheets.getCandidate.mockResolvedValue(paidCandidate);
+  sheets.getFetchedJobs.mockResolvedValue([fetchedJob]);
+  fetchIndeedJobs.mockResolvedValue([]);
+  sheets.isSeenJob.mockReturnValue(false);
+  processJobBatch.mockImplementation(async (batch) => {
+    stopJobsCrawler();
+    return batch.map((_, i) => ({ index: i, is_relevant: true, suggested_tip: 'Good match.' }));
+  });
+  await startJobsCrawler();
+  expect(sendJobAlertEmail).toHaveBeenCalled();
 });

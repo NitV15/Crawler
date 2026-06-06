@@ -82,7 +82,7 @@ async function runJobsCycle() {
         .filter((v, i, a) => v && a.indexOf(v) === i);
       let jobs = [];
       for (const loc of locations) {
-        const fetched = await fetchIndeedJobs(candidate.role, '', loc === 'Remote' ? '' : loc);
+        const fetched = await fetchIndeedJobs(candidate.role, candidate.skills || '', loc === 'Remote' ? '' : loc);
         jobs.push(...fetched);
       }
       const seenIds = new Set();
@@ -102,11 +102,13 @@ async function runJobsCycle() {
     }
   }
 
-  // Catch-up: buffer fetched_jobs for candidates who have never received a match
-  const newCandidates = candidates.filter(c => parseInt(c.lead_count) === 0);
-  if (newCandidates.length) {
+  // Catch-up: buffer fetched_jobs for new candidates and active subscribers
+  const catchUpCandidates = candidates.filter(c =>
+    parseInt(c.lead_count) === 0 || c.subscription_status === 'active'
+  );
+  if (catchUpCandidates.length) {
     const allFetchedJobs = await getFetchedJobs(0);
-    for (const candidate of newCandidates) {
+    for (const candidate of catchUpCandidates) {
       if (!jobsCrawlerState.running) break;
       for (const fj of allFetchedJobs) {
         if (isSeenJob(fj.job_id, candidate.id)) continue;
@@ -157,7 +159,10 @@ async function runJobsCycle() {
         .catch(err => console.error(`[jobs] Expiry email failed for ${freshCandidate.name}: ${err.message}`));
       continue;
     }
-    if (action === 'skip') continue;
+    if (action === 'skip') {
+      console.log(`[jobs] SKIP: ${freshCandidate.name} — lead_count=${freshCandidate.lead_count}, no active subscription`);
+      continue;
+    }
 
     await saveJobMatch({
       candidateId: freshCandidate.id, indeedJobId: job.job_id,

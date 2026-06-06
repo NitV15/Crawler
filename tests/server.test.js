@@ -6,58 +6,59 @@ const jwt = require('jsonwebtoken');
 const adminToken = jwt.sign({ type: 'admin', id: 0 }, 'test-secret');
 const adminCookie = `cm_auth=${adminToken}`;
 
-jest.mock('../sheets', () => ({
-  initSheets: jest.fn().mockResolvedValue(),
-  getDealers: jest.fn().mockResolvedValue([]),
-  getDealer: jest.fn().mockResolvedValue(null),
-  addDealer: jest.fn().mockResolvedValue(1),
-  updateDealer: jest.fn().mockResolvedValue(),
-  toggleDealer: jest.fn().mockResolvedValue(),
-  deleteDealer: jest.fn().mockResolvedValue(),
-  incrementDealerLeadCount: jest.fn().mockResolvedValue(),
-  activateDealerSubscription: jest.fn().mockResolvedValue(),
-  resetDealerSubscription: jest.fn().mockResolvedValue(),
-  saveLead: jest.fn().mockResolvedValue(1),
-  getLeads: jest.fn().mockResolvedValue([]),
-  getAllLeads: jest.fn().mockResolvedValue([]),
-  getUnmatchedLeads: jest.fn().mockResolvedValue([]),
-  getLead: jest.fn().mockResolvedValue(null),
-  assignLead: jest.fn().mockResolvedValue(),
-  saveFetchedPost: jest.fn().mockResolvedValue(),
-  getFetchedPosts: jest.fn().mockResolvedValue([]),
-  getFetchedPost: jest.fn().mockResolvedValue(null),
+jest.mock('../db', () => ({
+  initDb: jest.fn(),
+  getDealers: jest.fn().mockReturnValue([]),
+  getDealer: jest.fn().mockReturnValue(null),
+  addDealer: jest.fn().mockReturnValue(1),
+  updateDealer: jest.fn(),
+  toggleDealer: jest.fn(),
+  deleteDealer: jest.fn(),
+  incrementDealerLeadCount: jest.fn(),
+  activateDealerSubscription: jest.fn(),
+  resetDealerSubscription: jest.fn(),
+  saveLead: jest.fn(),
+  getLeads: jest.fn().mockReturnValue([]),
+  getAllLeads: jest.fn().mockReturnValue([]),
+  getUnmatchedLeads: jest.fn().mockReturnValue([]),
+  getLead: jest.fn().mockReturnValue(null),
+  assignLead: jest.fn(),
+  saveFetchedPost: jest.fn(),
+  getFetchedPosts: jest.fn().mockReturnValue([]),
+  getFetchedPost: jest.fn().mockReturnValue(null),
   isSeenPost: jest.fn().mockReturnValue(false),
   markPostSeen: jest.fn(),
-  addPayment: jest.fn().mockResolvedValue(1),
-  getPayment: jest.fn().mockResolvedValue(null),
-  getPayments: jest.fn().mockResolvedValue([]),
-  verifyPayment: jest.fn().mockResolvedValue(),
-  rejectPayment: jest.fn().mockResolvedValue(),
-  addCandidate: jest.fn().mockResolvedValue(1),
-  getCandidates: jest.fn().mockResolvedValue([]),
-  getActiveCandidates: jest.fn().mockResolvedValue([]),
-  getCandidate: jest.fn().mockResolvedValue(null),
-  updateCandidate: jest.fn().mockResolvedValue(),
-  toggleCandidate: jest.fn().mockResolvedValue(),
-  deleteCandidate: jest.fn().mockResolvedValue(),
-  incrementCandidateLeadCount: jest.fn().mockResolvedValue(),
-  activateCandidateSubscription: jest.fn().mockResolvedValue(),
-  resetCandidateSubscription: jest.fn().mockResolvedValue(),
-  saveJobMatch: jest.fn().mockResolvedValue(),
-  getJobMatches: jest.fn().mockResolvedValue([]),
+  addPayment: jest.fn().mockReturnValue(1),
+  getPayment: jest.fn().mockReturnValue(null),
+  getPayments: jest.fn().mockReturnValue([]),
+  verifyPayment: jest.fn(),
+  rejectPayment: jest.fn(),
+  addCandidate: jest.fn().mockReturnValue(1),
+  getCandidates: jest.fn().mockReturnValue([]),
+  getActiveCandidates: jest.fn().mockReturnValue([]),
+  getCandidate: jest.fn().mockReturnValue(null),
+  updateCandidate: jest.fn(),
+  toggleCandidate: jest.fn(),
+  deleteCandidate: jest.fn(),
+  incrementCandidateLeadCount: jest.fn(),
+  activateCandidateSubscription: jest.fn(),
+  resetCandidateSubscription: jest.fn(),
+  saveJobMatch: jest.fn(),
+  getJobMatches: jest.fn().mockReturnValue([]),
   isSeenJob: jest.fn().mockReturnValue(false),
   markJobSeen: jest.fn(),
-  getFetchedJobs: jest.fn().mockResolvedValue([]),
-  getFetchedJob: jest.fn().mockResolvedValue(null),
-  addCandidatePayment: jest.fn().mockResolvedValue(1),
-  getCandidatePayment: jest.fn().mockResolvedValue(null),
-  getCandidatePayments: jest.fn().mockResolvedValue([]),
-  verifyCandidatePayment: jest.fn().mockResolvedValue(),
-  rejectCandidatePayment: jest.fn().mockResolvedValue(),
-  cleanupOldData: jest.fn().mockResolvedValue({ deleted_fetched: 0, deleted_unmatched: 0 }),
-  readSheet: jest.fn().mockResolvedValue([]),
-  getDealerLeads: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pages: 0 }),
-  getCandidateJobMatches: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getFetchedJobs: jest.fn().mockReturnValue([]),
+  getFetchedJob: jest.fn().mockReturnValue(null),
+  addCandidatePayment: jest.fn().mockReturnValue(1),
+  getCandidatePayment: jest.fn().mockReturnValue(null),
+  getCandidatePayments: jest.fn().mockReturnValue([]),
+  verifyCandidatePayment: jest.fn(),
+  rejectCandidatePayment: jest.fn(),
+  cleanupOldData: jest.fn().mockReturnValue({ deleted_fetched_posts: 0, deleted_fetched_jobs: 0, deleted_unmatched_leads: 0 }),
+  getLeadsByDealer: jest.fn().mockReturnValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getCandidateJobMatches: jest.fn().mockReturnValue({ items: [], total: 0, page: 1, pages: 0 }),
+  getDealerLeadStats: jest.fn().mockReturnValue({ total: 0, thisMonth: 0 }),
+  getCandidateMatchCount: jest.fn().mockReturnValue(0),
 }));
 
 jest.mock('../crawler', () => ({
@@ -88,7 +89,7 @@ jest.mock('../mailer', () => ({
   sendCandidatePaymentRejectedEmail: jest.fn().mockResolvedValue(),
 }));
 
-const sheetsModule = require('../sheets');
+const sheetsModule = require('../db');
 const sheets = sheetsModule;
 const mailerModule = require('../mailer');
 const mailer = mailerModule;
@@ -120,7 +121,7 @@ test('POST /api/register returns 400 when required fields missing', async () => 
 });
 
 test('POST /api/register returns 400 when email already registered', async () => {
-  sheetsModule.getDealers.mockResolvedValue([{ id: '1', emails: 'a@b.com', active: '1' }]);
+  sheetsModule.getDealers.mockReturnValue([{ id: '1', emails: 'a@b.com', active: '1' }]);
   const res = await request(app).post('/api/register').send(dealerData);
   expect(res.status).toBe(400);
   expect(res.body.error).toBe('Email already registered');
@@ -128,7 +129,7 @@ test('POST /api/register returns 400 when email already registered', async () =>
 });
 
 test('PUT /api/dealers/:id ignores email from body and keeps existing email', async () => {
-  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Old Name', emails: 'original@b.com' });
+  sheetsModule.getDealer.mockReturnValue({ id: 1, name: 'Old Name', emails: 'original@b.com' });
   const dealerToken = jwt.sign({ type: 'dealer', id: 1 }, 'test-secret');
   const res = await request(app).put('/api/dealers/1')
     .set('Cookie', `cm_auth=${dealerToken}`)
@@ -150,7 +151,7 @@ test('DELETE /api/dealers/:id returns 403 for non-admin', async () => {
 });
 
 test('GET /api/dealers returns dealer list', async () => {
-  sheetsModule.getDealers.mockResolvedValue([
+  sheetsModule.getDealers.mockReturnValue([
     { id: '1', name: 'Test Co', city: 'Faridabad', active: '1' },
   ]);
   const res = await request(app).get('/api/dealers').set('Cookie', adminCookie);
@@ -194,8 +195,8 @@ test('POST /api/payments submits UTR', async () => {
 });
 
 test('POST /api/payments/:id/verify activates subscription', async () => {
-  sheetsModule.getPayment.mockResolvedValue({ id: 5, dealer_id: 1, utr_number: 'UTR456', status: 'pending' });
-  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
+  sheetsModule.getPayment.mockReturnValue({ id: 5, dealer_id: 1, utr_number: 'UTR456', status: 'pending' });
+  sheetsModule.getDealer.mockReturnValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
   const res = await request(app).post('/api/payments/5/verify').set('Cookie', adminCookie).send({});
   expect(res.status).toBe(200);
   expect(sheetsModule.verifyPayment).toHaveBeenCalledWith(5);
@@ -204,8 +205,8 @@ test('POST /api/payments/:id/verify activates subscription', async () => {
 });
 
 test('POST /api/payments/:id/reject sets status rejected', async () => {
-  sheetsModule.getPayment.mockResolvedValue({ id: 6, dealer_id: 1, utr_number: 'UTR789', status: 'pending' });
-  sheetsModule.getDealer.mockResolvedValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
+  sheetsModule.getPayment.mockReturnValue({ id: 6, dealer_id: 1, utr_number: 'UTR789', status: 'pending' });
+  sheetsModule.getDealer.mockReturnValue({ id: 1, name: 'Test Co', emails: 'a@b.com' });
   const res = await request(app).post('/api/payments/6/reject').set('Cookie', adminCookie).send({});
   expect(res.status).toBe(200);
   expect(sheetsModule.rejectPayment).toHaveBeenCalledWith(6);
@@ -231,7 +232,7 @@ test('GET /api/payments returns payment list', async () => {
 });
 
 test('POST /api/candidates/register creates a candidate', async () => {
-  sheetsModule.addCandidate.mockResolvedValue(1);
+  sheetsModule.addCandidate.mockReturnValue(1);
   const res = await request(app).post('/api/candidates/register').send({
     name: 'John Dev', emails: 'john@dev.com', role: 'Developer',
     skills: 'JavaScript', experience_level: 'Mid', city: 'Delhi', state: 'Delhi',
@@ -245,7 +246,7 @@ test('POST /api/candidates/register creates a candidate', async () => {
 });
 
 test('POST /api/candidates/register returns 400 when email already registered', async () => {
-  sheetsModule.getCandidates.mockResolvedValue([{ id: '1', emails: 'john@dev.com', active: '1' }]);
+  sheetsModule.getCandidates.mockReturnValue([{ id: '1', emails: 'john@dev.com', active: '1' }]);
   const res = await request(app).post('/api/candidates/register').send({
     name: 'Duplicate', emails: 'john@dev.com', role: 'Developer',
     skills: 'JavaScript', city: 'Delhi',
@@ -256,7 +257,7 @@ test('POST /api/candidates/register returns 400 when email already registered', 
 });
 
 test('PUT /api/candidates/:id ignores email from body and keeps existing email', async () => {
-  sheetsModule.getCandidate.mockResolvedValue({ id: '1', name: 'John Dev', emails: 'original@dev.com' });
+  sheetsModule.getCandidate.mockReturnValue({ id: '1', name: 'John Dev', emails: 'original@dev.com' });
   const candidateToken = jwt.sign({ type: 'candidate', id: 1 }, 'test-secret');
   const res = await request(app).put('/api/candidates/1')
     .set('Cookie', `cm_auth=${candidateToken}`)
@@ -278,7 +279,7 @@ test('DELETE /api/candidates/:id returns 403 for non-admin', async () => {
 });
 
 test('GET /api/candidates returns candidate list', async () => {
-  sheetsModule.getCandidates.mockResolvedValue([{ id: '1', name: 'John Dev', active: '1' }]);
+  sheetsModule.getCandidates.mockReturnValue([{ id: '1', name: 'John Dev', active: '1' }]);
   const res = await request(app).get('/api/candidates').set('Cookie', adminCookie);
   expect(res.status).toBe(200);
   expect(res.body).toHaveLength(1);
@@ -286,8 +287,8 @@ test('GET /api/candidates returns candidate list', async () => {
 });
 
 test('POST /api/candidate-payments creates a payment', async () => {
-  sheetsModule.getCandidate.mockResolvedValue({ id: '1', name: 'John Dev', emails: 'john@dev.com' });
-  sheetsModule.addCandidatePayment.mockResolvedValue(1);
+  sheetsModule.getCandidate.mockReturnValue({ id: '1', name: 'John Dev', emails: 'john@dev.com' });
+  sheetsModule.addCandidatePayment.mockReturnValue(1);
   const res = await request(app).post('/api/candidate-payments').send({ candidate_id: 1, utr_number: 'UTR99912345' });
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
@@ -296,7 +297,7 @@ test('POST /api/candidate-payments creates a payment', async () => {
 
 describe('GET /api/fetched-jobs', () => {
   test('returns fetched jobs list', async () => {
-    sheets.getFetchedJobs.mockResolvedValue([
+    sheets.getFetchedJobs.mockReturnValue([
       { id: '1', job_id: 'adzuna_1', job_title: 'React Dev', company: 'Startup', location: 'Pune', job_url: 'http://a', snippet: 'React needed', fetched_at: '2026-05-29T00:00:00Z' },
     ]);
     const res = await request(app).get('/api/fetched-jobs').set('Cookie', adminCookie);
@@ -311,10 +312,10 @@ describe('POST /api/fetched-jobs/:id/send', () => {
   const fakeCandidate = { id: '1', name: 'Raj', emails: 'raj@test.com', lead_count: '0', subscription_status: 'free', subscription_expires_at: null };
 
   beforeEach(() => {
-    sheets.getFetchedJob.mockResolvedValue(fakeJob);
-    sheets.getCandidate.mockResolvedValue(fakeCandidate);
-    sheets.saveJobMatch.mockResolvedValue(1);
-    sheets.incrementCandidateLeadCount.mockResolvedValue();
+    sheets.getFetchedJob.mockReturnValue(fakeJob);
+    sheets.getCandidate.mockReturnValue(fakeCandidate);
+    sheets.saveJobMatch.mockReturnValue(1);
+    sheets.incrementCandidateLeadCount.mockReturnValue();
     mailer.sendJobAlertEmail.mockResolvedValue();
   });
 
@@ -324,13 +325,13 @@ describe('POST /api/fetched-jobs/:id/send', () => {
   });
 
   test('returns 404 if job not found', async () => {
-    sheets.getFetchedJob.mockResolvedValue(null);
+    sheets.getFetchedJob.mockReturnValue(null);
     const res = await request(app).post('/api/fetched-jobs/99/send').set('Cookie', adminCookie).send({ candidate_id: 1 });
     expect(res.status).toBe(404);
   });
 
   test('returns 404 if candidate not found', async () => {
-    sheets.getCandidate.mockResolvedValue(null);
+    sheets.getCandidate.mockReturnValue(null);
     const res = await request(app).post('/api/fetched-jobs/3/send').set('Cookie', adminCookie).send({ candidate_id: 99 });
     expect(res.status).toBe(404);
   });

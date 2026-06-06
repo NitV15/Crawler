@@ -26,6 +26,10 @@ function getDb() {
   return db;
 }
 
+const seenPosts = new Set();
+const seenJobs = new Set();
+const seenFetchedJobs = new Set();
+
 function _getDb() { return getDb(); }
 function _resetDb() {
   if (db && DB_PATH !== ':memory:') { db.close(); }
@@ -33,10 +37,6 @@ function _resetDb() {
   if (DB_PATH === ':memory:') { global.__testDb = null; }
   seenPosts.clear(); seenJobs.clear(); seenFetchedJobs.clear();
 }
-
-const seenPosts = new Set();
-const seenJobs = new Set();
-const seenFetchedJobs = new Set();
 
 function initDb() {
   const d = getDb();
@@ -162,6 +162,7 @@ function markPostSeen(postId) { seenPosts.add(postId); }
 function isSeenJob(jobId, candidateId) { return seenJobs.has(`${candidateId}:${jobId}`); }
 function markJobSeen(jobId, candidateId) { seenJobs.add(`${candidateId}:${jobId}`); }
 function isSeenFetchedJob(jobId) { return seenFetchedJobs.has(jobId); }
+function markFetchedJobSeen(jobId) { seenFetchedJobs.add(jobId); }
 
 function syncJobMatches(rows) {
   const d = getDb();
@@ -265,6 +266,6 @@ function getLeadsByDealer(dealerId, page = 1, pageSize = 20) {
 
 module.exports = {
   initDb, _getDb, _resetDb,
-  isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob,
+  isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
   syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer,
 };

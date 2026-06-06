@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { getActiveDealers, getDealer, saveLead, incrementDealerLeadCount,
-        resetDealerSubscription, saveFetchedPost, isSeenPost, markPostSeen } = require('./sheets');
+        resetDealerSubscription, saveFetchedPost, isSeenPost, markPostSeen } = require('./db');
 const { shouldCheckPost } = require('./prefilter');
 const { buildSubredditList } = require('./subreddits');
 const { processPostBatch } = require('./matcher');

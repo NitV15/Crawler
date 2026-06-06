@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { getActiveCandidates, getCandidate, saveJobMatch, incrementCandidateLeadCount,
         resetCandidateSubscription, isSeenJob, markJobSeen, batchSaveFetchedJobs,
-        getFetchedJobs } = require('./sheets');
+        getFetchedJobs } = require('./db');
 const { fetchIndeedJobs } = require('./indeed-fetcher');
 const { processJobBatch } = require('./job-matcher');
 const { sendJobAlertEmail, sendCandidateExpiryWarningEmail, sendCandidateExpiredEmail } = require('./mailer');
@@ -44,7 +44,7 @@ async function runJobsCycle() {
 
   // Auto-purge stale fetched data (5-day retention)
   try {
-    const { cleanupOldData } = require('./sheets');
+    const { cleanupOldData } = require('./db');
     const purged = await cleanupOldData();
     if (purged.deleted_fetched_jobs > 0 || purged.deleted_fetched_posts > 0)
       console.log(`[jobs] Cleanup: removed ${purged.deleted_fetched_jobs} old jobs, ${purged.deleted_fetched_posts} old posts`);

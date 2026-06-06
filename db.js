@@ -2,56 +2,166 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, 'data', 'crawler.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'crawler.db');
 
 let db;
 
 function getDb() {
   if (!db) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    if (DB_PATH === ':memory:') {
+      // In test mode, reuse a global connection so jest.resetModules() doesn't lose data
+      if (!global.__testDb) {
+        global.__testDb = new Database(':memory:');
+        global.__testDb.pragma('journal_mode = WAL');
+        global.__testDb.pragma('foreign_keys = ON');
+      }
+      db = global.__testDb;
+    } else {
+      fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      db = new Database(DB_PATH);
+      db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
+    }
   }
   return db;
 }
 
+function _getDb() { return getDb(); }
+function _resetDb() {
+  if (db && DB_PATH !== ':memory:') { db.close(); }
+  db = null;
+  if (DB_PATH === ':memory:') { global.__testDb = null; }
+  seenPosts.clear(); seenJobs.clear(); seenFetchedJobs.clear();
+}
+
+const seenPosts = new Set();
+const seenJobs = new Set();
+const seenFetchedJobs = new Set();
+
 function initDb() {
   const d = getDb();
   d.exec(`
-    CREATE TABLE IF NOT EXISTS job_matches (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      candidate_id TEXT NOT NULL,
-      indeed_job_id TEXT NOT NULL,
-      job_title   TEXT,
-      company     TEXT,
-      location    TEXT,
-      job_url     TEXT,
-      snippet     TEXT,
-      suggested_tip TEXT,
-      status      TEXT,
-      emailed_at  TEXT,
-      UNIQUE(candidate_id, indeed_job_id)
+    CREATE TABLE IF NOT EXISTS dealers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      emails TEXT NOT NULL DEFAULT '',
+      industry TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      industry_category TEXT DEFAULT '',
+      services TEXT DEFAULT '',
+      target_customers TEXT DEFAULT '',
+      keywords TEXT DEFAULT '',
+      state TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      service_areas TEXT DEFAULT '',
+      custom_subreddits TEXT DEFAULT '',
+      lead_count INTEGER DEFAULT 0,
+      subscription_status TEXT DEFAULT 'free',
+      subscription_expires_at TEXT DEFAULT '',
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS candidates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT '',
+      emails TEXT NOT NULL DEFAULT '',
+      role TEXT DEFAULT '',
+      skills TEXT DEFAULT '',
+      experience_level TEXT DEFAULT '',
+      city TEXT DEFAULT '',
+      state TEXT DEFAULT '',
+      preferred_locations TEXT DEFAULT '',
+      lead_count INTEGER DEFAULT 0,
+      subscription_status TEXT DEFAULT 'free',
+      subscription_expires_at TEXT DEFAULT '',
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS leads (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      dealer_id   TEXT NOT NULL,
-      reddit_post_id TEXT NOT NULL,
-      post_title  TEXT,
-      post_text   TEXT,
-      post_url    TEXT,
-      subreddit   TEXT,
-      match_reason TEXT,
-      suggested_reply TEXT,
-      what_to_sell TEXT,
-      lead_category TEXT,
-      post_location TEXT,
-      status      TEXT,
-      emailed_at  TEXT,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dealer_id TEXT NOT NULL DEFAULT '',
+      reddit_post_id TEXT NOT NULL DEFAULT '',
+      post_title TEXT DEFAULT '',
+      post_text TEXT DEFAULT '',
+      post_url TEXT DEFAULT '',
+      subreddit TEXT DEFAULT '',
+      match_reason TEXT DEFAULT '',
+      suggested_reply TEXT DEFAULT '',
+      what_to_sell TEXT DEFAULT '',
+      lead_category TEXT DEFAULT '',
+      post_location TEXT DEFAULT '',
+      status TEXT DEFAULT 'matched',
+      emailed_at TEXT DEFAULT '',
       UNIQUE(dealer_id, reddit_post_id)
     );
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dealer_id TEXT NOT NULL DEFAULT '',
+      utr_number TEXT NOT NULL DEFAULT '',
+      amount TEXT DEFAULT '10',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT '',
+      verified_at TEXT DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS fetched_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id TEXT NOT NULL UNIQUE,
+      post_title TEXT DEFAULT '',
+      post_text TEXT DEFAULT '',
+      post_url TEXT DEFAULT '',
+      subreddit TEXT DEFAULT '',
+      fetched_at TEXT DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS fetched_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL UNIQUE,
+      job_title TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      job_url TEXT DEFAULT '',
+      snippet TEXT DEFAULT '',
+      fetched_at TEXT DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS job_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id TEXT NOT NULL DEFAULT '',
+      indeed_job_id TEXT NOT NULL DEFAULT '',
+      job_title TEXT DEFAULT '',
+      company TEXT DEFAULT '',
+      location TEXT DEFAULT '',
+      job_url TEXT DEFAULT '',
+      snippet TEXT DEFAULT '',
+      suggested_tip TEXT DEFAULT '',
+      status TEXT DEFAULT 'matched',
+      emailed_at TEXT DEFAULT '',
+      UNIQUE(candidate_id, indeed_job_id)
+    );
+    CREATE TABLE IF NOT EXISTS candidate_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id TEXT NOT NULL DEFAULT '',
+      utr_number TEXT NOT NULL DEFAULT '',
+      amount TEXT DEFAULT '10',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT '',
+      verified_at TEXT DEFAULT ''
+    );
   `);
+
+  d.prepare('SELECT post_id FROM fetched_posts').all()
+    .forEach(r => seenPosts.add(r.post_id));
+  d.prepare('SELECT candidate_id, indeed_job_id FROM job_matches').all()
+    .forEach(r => seenJobs.add(`${r.candidate_id}:${r.indeed_job_id}`));
+  d.prepare('SELECT job_id FROM fetched_jobs').all()
+    .forEach(r => seenFetchedJobs.add(r.job_id));
+
+  console.log(`[db] Connected. seenPosts=${seenPosts.size}, seenJobs=${seenJobs.size}, seenFetchedJobs=${seenFetchedJobs.size}`);
 }
+
+function isSeenPost(postId) { return seenPosts.has(postId); }
+function markPostSeen(postId) { seenPosts.add(postId); }
+function isSeenJob(jobId, candidateId) { return seenJobs.has(`${candidateId}:${jobId}`); }
+function markJobSeen(jobId, candidateId) { seenJobs.add(`${candidateId}:${jobId}`); }
+function isSeenFetchedJob(jobId) { return seenFetchedJobs.has(jobId); }
 
 function syncJobMatches(rows) {
   const d = getDb();
@@ -153,4 +263,8 @@ function getLeadsByDealer(dealerId, page = 1, pageSize = 20) {
   return { items, total, page, pages: Math.ceil(total / pageSize) || 1 };
 }
 
-module.exports = { initDb, syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer };
+module.exports = {
+  initDb, _getDb, _resetDb,
+  isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob,
+  syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer,
+};

@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const sheetsSync = require('./sheets-sync');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'crawler.db');
 
@@ -171,6 +172,7 @@ function addDealer({ name, emails, industry_category, services, target_customers
     INSERT INTO dealers (name,emails,industry,description,industry_category,services,target_customers,keywords,state,city,service_areas,custom_subreddits,lead_count,subscription_status,subscription_expires_at,active,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'free','',1,?)
   `).run(name,emails,industry_category||'',services||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',new Date().toISOString());
+  sheetsSync.syncDealersToSheets(getDealers());
   return result.lastInsertRowid;
 }
 
@@ -190,29 +192,35 @@ function updateDealer(id, { name, emails, industry_category, services, target_cu
   getDb().prepare(`
     UPDATE dealers SET name=?,emails=?,industry=?,description=?,industry_category=?,services=?,target_customers=?,keywords=?,state=?,city=?,service_areas=?,custom_subreddits=? WHERE id=?
   `).run(name,emails,industry_category||'',services||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',String(id));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 function toggleDealer(id, active) {
   getDb().prepare('UPDATE dealers SET active = ? WHERE id = ?').run(active ? 1 : 0, String(id));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 function deleteDealer(id) {
   getDb().prepare('DELETE FROM dealers WHERE id = ?').run(String(id));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 function incrementDealerLeadCount(dealerId) {
   getDb().prepare('UPDATE dealers SET lead_count = lead_count + 1 WHERE id = ?').run(String(dealerId));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 function activateDealerSubscription(dealerId) {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   getDb().prepare('UPDATE dealers SET subscription_status=?,subscription_expires_at=?,lead_count=0 WHERE id=?')
     .run('active', expiresAt, String(dealerId));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 function resetDealerSubscription(dealerId) {
   getDb().prepare("UPDATE dealers SET subscription_status='free',subscription_expires_at='',lead_count=0 WHERE id=?")
     .run(String(dealerId));
+  sheetsSync.syncDealersToSheets(getDealers());
 }
 
 // ─── Candidates ───────────────────────────────────────────────────────────────
@@ -222,6 +230,7 @@ function addCandidate({ name, emails, role, skills, experience_level, city, stat
     INSERT INTO candidates (name,emails,role,skills,experience_level,city,state,preferred_locations,lead_count,subscription_status,subscription_expires_at,active,created_at)
     VALUES (?,?,?,?,?,?,?,?,0,'free','',1,?)
   `).run(name,emails,role||'',skills||'',experience_level||'',city||'',state||'',preferred_locations||'',new Date().toISOString());
+  sheetsSync.syncCandidatesToSheets(getCandidates());
   return result.lastInsertRowid;
 }
 
@@ -241,29 +250,35 @@ function updateCandidate(id, { name, emails, role, skills, experience_level, cit
   getDb().prepare(`
     UPDATE candidates SET name=?,emails=?,role=?,skills=?,experience_level=?,city=?,state=?,preferred_locations=? WHERE id=?
   `).run(name,emails,role||'',skills||'',experience_level||'',city||'',state||'',preferred_locations||'',String(id));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 function toggleCandidate(id, active) {
   getDb().prepare('UPDATE candidates SET active = ? WHERE id = ?').run(active ? 1 : 0, String(id));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 function deleteCandidate(id) {
   getDb().prepare('DELETE FROM candidates WHERE id = ?').run(String(id));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 function incrementCandidateLeadCount(candidateId) {
   getDb().prepare('UPDATE candidates SET lead_count = lead_count + 1 WHERE id = ?').run(String(candidateId));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 function activateCandidateSubscription(candidateId) {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   getDb().prepare('UPDATE candidates SET subscription_status=?,subscription_expires_at=?,lead_count=0 WHERE id=?')
     .run('active', expiresAt, String(candidateId));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 function resetCandidateSubscription(candidateId) {
   getDb().prepare("UPDATE candidates SET subscription_status='free',subscription_expires_at='',lead_count=0 WHERE id=?")
     .run(String(candidateId));
+  sheetsSync.syncCandidatesToSheets(getCandidates());
 }
 
 // ─── Leads ────────────────────────────────────────────────────────────────────

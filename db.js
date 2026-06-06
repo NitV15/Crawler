@@ -164,6 +164,57 @@ function markJobSeen(jobId, candidateId) { seenJobs.add(`${candidateId}:${jobId}
 function isSeenFetchedJob(jobId) { return seenFetchedJobs.has(jobId); }
 function markFetchedJobSeen(jobId) { seenFetchedJobs.add(jobId); }
 
+// ─── Dealers ──────────────────────────────────────────────────────────────────
+
+function addDealer({ name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits }) {
+  const result = getDb().prepare(`
+    INSERT INTO dealers (name,emails,industry,description,industry_category,services,target_customers,keywords,state,city,service_areas,custom_subreddits,lead_count,subscription_status,subscription_expires_at,active,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'free','',1,?)
+  `).run(name,emails,industry_category||'',services||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',new Date().toISOString());
+  return result.lastInsertRowid;
+}
+
+function getDealers() {
+  return getDb().prepare('SELECT * FROM dealers ORDER BY id DESC').all();
+}
+
+function getActiveDealers() {
+  return getDb().prepare('SELECT * FROM dealers WHERE active = 1 ORDER BY id DESC').all();
+}
+
+function getDealer(id) {
+  return getDb().prepare('SELECT * FROM dealers WHERE id = ?').get(String(id)) || null;
+}
+
+function updateDealer(id, { name, emails, industry_category, services, target_customers, keywords, state, city, service_areas, custom_subreddits }) {
+  getDb().prepare(`
+    UPDATE dealers SET name=?,emails=?,industry=?,industry_category=?,services=?,target_customers=?,keywords=?,state=?,city=?,service_areas=?,custom_subreddits=? WHERE id=?
+  `).run(name,emails,industry_category||'',industry_category||'',services||'',target_customers||'',keywords||'',state||'',city||'',service_areas||'',custom_subreddits||'',String(id));
+}
+
+function toggleDealer(id, active) {
+  getDb().prepare('UPDATE dealers SET active = ? WHERE id = ?').run(active ? 1 : 0, String(id));
+}
+
+function deleteDealer(id) {
+  getDb().prepare('DELETE FROM dealers WHERE id = ?').run(String(id));
+}
+
+function incrementDealerLeadCount(dealerId) {
+  getDb().prepare('UPDATE dealers SET lead_count = lead_count + 1 WHERE id = ?').run(String(dealerId));
+}
+
+function activateDealerSubscription(dealerId) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  getDb().prepare('UPDATE dealers SET subscription_status=?,subscription_expires_at=?,lead_count=0 WHERE id=?')
+    .run('active', expiresAt, String(dealerId));
+}
+
+function resetDealerSubscription(dealerId) {
+  getDb().prepare("UPDATE dealers SET subscription_status='free',subscription_expires_at='',lead_count=0 WHERE id=?")
+    .run(String(dealerId));
+}
+
 function syncJobMatches(rows) {
   const d = getDb();
   const insert = d.prepare(`
@@ -267,5 +318,7 @@ function getLeadsByDealer(dealerId, page = 1, pageSize = 20) {
 module.exports = {
   initDb, _getDb, _resetDb,
   isSeenPost, markPostSeen, isSeenJob, markJobSeen, isSeenFetchedJob, markFetchedJobSeen,
+  addDealer, getDealers, getActiveDealers, getDealer, updateDealer, toggleDealer, deleteDealer,
+  incrementDealerLeadCount, activateDealerSubscription, resetDealerSubscription,
   syncJobMatches, syncLeads, insertJobMatch, insertLead, getJobMatchesByCandidate, getLeadsByDealer,
 };
